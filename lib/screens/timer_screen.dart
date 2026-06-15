@@ -42,6 +42,7 @@ class _TimerScreenState extends State<TimerScreen> {
   @override
   void initState() {
     super.initState();
+    AudioService.instance; // Force lazy-init to eagerly preload audio assets
     _loadProfileSettings();
     _setupBluetooth();
   }
@@ -102,6 +103,8 @@ class _TimerScreenState extends State<TimerScreen> {
         AudioService.instance.playWorkChime();
       } else if (event.timeRemaining == _restDuration && event.state == WorkoutState.REST) {
         AudioService.instance.playRestChime();
+      } else if (event.timeRemaining == 10 && event.state == WorkoutState.PREP) {
+        AudioService.instance.playWorkChime(); // Play 'Work' sound for PREP
       }
     });
 
@@ -372,8 +375,9 @@ class _TimerScreenState extends State<TimerScreen> {
 
     double progress = 0.0;
     if (_currentEvent.state != WorkoutState.IDLE && _currentEvent.state != WorkoutState.FINISHED) {
-      int elapsed = totalPhaseDuration - _currentEvent.timeRemaining;
+      int elapsed = totalPhaseDuration - _currentEvent.timeRemaining + 1;
       progress = elapsed / totalPhaseDuration;
+      if (progress > 1.0) progress = 1.0;
     }
 
     final size = MediaQuery.of(context).size;
@@ -398,7 +402,9 @@ class _TimerScreenState extends State<TimerScreen> {
             duration: const Duration(milliseconds: 1000),
             curve: Curves.linear,
             builder: (context, value, _) => CircularProgressIndicator(
-              value: _currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED ? 1.0 : value,
+              value: _currentEvent.isWaitingForHr 
+                  ? null 
+                  : (_currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED ? 1.0 : value),
               strokeWidth: strokeWidth,
               backgroundColor: stateColor.withOpacity(0.2),
               valueColor: AlwaysStoppedAnimation<Color>(stateColor),
