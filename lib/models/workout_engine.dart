@@ -4,6 +4,7 @@ enum WorkoutState { IDLE, PREP, WORK, REST, PAUSED, FINISHED }
 
 class WorkoutEvent {
   final WorkoutState state;
+  final WorkoutState? prevState;
   final int timeRemaining;
   final int currentRound;
   final int totalRounds;
@@ -11,6 +12,7 @@ class WorkoutEvent {
 
   WorkoutEvent({
     required this.state,
+    this.prevState,
     required this.timeRemaining,
     required this.currentRound,
     required this.totalRounds,
@@ -29,6 +31,7 @@ class WorkoutEngine {
 
   // State
   WorkoutState _state = WorkoutState.IDLE;
+  WorkoutState? _prevState;
   int _currentRound = 1;
   int _timeRemaining = 0;
   bool _isWaitingForHr = false;
@@ -67,10 +70,13 @@ class WorkoutEngine {
     
     if (_state == WorkoutState.PAUSED) {
       // Resume
-      // We would need to know the previous state, but for simplicity let's assume 
-      // the UI handles pause/resume logic or we store _prevState.
-      // A more robust implementation will track the previous state.
+      if (_prevState != null) {
+        _state = _prevState!;
+        _prevState = null;
+        _broadcast();
+      }
     } else {
+      _prevState = _state;
       _state = WorkoutState.PAUSED;
       _broadcast();
     }
@@ -120,10 +126,10 @@ class WorkoutEngine {
         _timeRemaining = workDuration;
         break;
       case WorkoutState.WORK:
-        if (_currentRound >= totalRounds) {
-          _state = WorkoutState.FINISHED;
-          _timeRemaining = 0;
-          _timer?.cancel();
+        if (baseRestDuration <= 0) {
+          _currentRound++;
+          _state = WorkoutState.WORK;
+          _timeRemaining = workDuration;
         } else {
           _state = WorkoutState.REST;
           _timeRemaining = baseRestDuration;
@@ -143,6 +149,7 @@ class WorkoutEngine {
   void _broadcast() {
     _stateController.add(WorkoutEvent(
       state: _state,
+      prevState: _prevState,
       timeRemaining: _timeRemaining,
       currentRound: _currentRound,
       totalRounds: totalRounds,

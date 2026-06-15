@@ -14,11 +14,12 @@ class TimerScreen extends StatefulWidget {
   State<TimerScreen> createState() => _TimerScreenState();
 }
 
-class _TimerScreenState extends State<TimerScreen> {
+class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStateMixin {
   WorkoutEngine? _engine;
   StreamSubscription? _workoutSubscription;
   StreamSubscription? _hrSubscription;
   StreamSubscription? _btStateSubscription;
+  late AnimationController _progressController;
 
   int _workDuration = 60;
   int _restDuration = 10;
@@ -42,6 +43,7 @@ class _TimerScreenState extends State<TimerScreen> {
   @override
   void initState() {
     super.initState();
+    _progressController = AnimationController(vsync: this);
     AudioService.instance; // Force lazy-init to eagerly preload audio assets
     _loadProfileSettings();
     _setupBluetooth();
@@ -106,6 +108,37 @@ class _TimerScreenState extends State<TimerScreen> {
       } else if (event.timeRemaining == 10 && event.state == WorkoutState.PREP) {
         AudioService.instance.playWorkChime(); // Play 'Work' sound for PREP
       }
+
+      // Animation orchestration
+      if (event.state == WorkoutState.PAUSED) {
+        _progressController.stop(); // Instantly freeze animation!
+      } else if (event.state == WorkoutState.IDLE || event.state == WorkoutState.FINISHED) {
+        _progressController.stop();
+        _progressController.value = 1.0;
+      } else if (event.isWaitingForHr) {
+        _progressController.stop(); // Let CircularProgressIndicator handle the infinite spin
+      } else {
+        int totalPhaseDuration = 1;
+        switch (event.state) {
+          case WorkoutState.PREP: totalPhaseDuration = 10; break;
+          case WorkoutState.WORK: totalPhaseDuration = _workDuration; break;
+          case WorkoutState.REST: totalPhaseDuration = _restDuration; break;
+          default: totalPhaseDuration = 1;
+        }
+        if (totalPhaseDuration <= 0) totalPhaseDuration = 1;
+
+        double targetProgress = (totalPhaseDuration - event.timeRemaining + 1) / totalPhaseDuration;
+        if (targetProgress > 1.0) targetProgress = 1.0;
+
+        if (event.timeRemaining == totalPhaseDuration || targetProgress < _progressController.value) {
+          _progressController.value = 0.0;
+        }
+
+        int durationMs = ((targetProgress - _progressController.value) * totalPhaseDuration * 1000).toInt();
+        if (durationMs <= 0) durationMs = 1000;
+
+        _progressController.animateTo(targetProgress, duration: Duration(milliseconds: durationMs), curve: Curves.linear);
+      }
     });
 
     _engine!.start();
@@ -133,6 +166,7 @@ class _TimerScreenState extends State<TimerScreen> {
 
   @override
   void dispose() {
+    _progressController.dispose();
     _workoutSubscription?.cancel();
     _hrSubscription?.cancel();
     _btStateSubscription?.cancel();
@@ -327,7 +361,11 @@ class _TimerScreenState extends State<TimerScreen> {
     Color stateColor;
     String stateText;
     
-    switch (_currentEvent.state) {
+    WorkoutState displayState = _currentEvent.state == WorkoutState.PAUSED 
+        ? (_currentEvent.prevState ?? WorkoutState.WORK) 
+        : _currentEvent.state;
+
+    switch (displayState) {
       case WorkoutState.IDLE:
         stateColor = Theme.of(context).colorScheme.surface;
         stateText = 'READY';
@@ -356,8 +394,13 @@ class _TimerScreenState extends State<TimerScreen> {
         stateText = '';
     }
 
+    if (_currentEvent.state == WorkoutState.PAUSED) {
+      stateText = 'PAUSED';
+      stateColor = Colors.grey;
+    }
+
     int totalPhaseDuration = 1;
-    switch (_currentEvent.state) {
+    switch (displayState) {
       case WorkoutState.PREP:
         totalPhaseDuration = 10;
         break;
@@ -372,13 +415,6 @@ class _TimerScreenState extends State<TimerScreen> {
     }
 
     if (totalPhaseDuration <= 0) totalPhaseDuration = 1;
-
-    double progress = 0.0;
-    if (_currentEvent.state != WorkoutState.IDLE && _currentEvent.state != WorkoutState.FINISHED) {
-      int elapsed = totalPhaseDuration - _currentEvent.timeRemaining + 1;
-      progress = elapsed / totalPhaseDuration;
-      if (progress > 1.0) progress = 1.0;
-    }
 
     final size = MediaQuery.of(context).size;
     // Base size off the smaller dimension, capped between 200px and 600px
@@ -396,15 +432,12 @@ class _TimerScreenState extends State<TimerScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          TweenAnimationBuilder<double>(
-            key: ValueKey('${_currentEvent.state}_${_currentEvent.currentRound}'),
-            tween: Tween<double>(begin: 0, end: progress),
-            duration: const Duration(milliseconds: 1000),
-            curve: Curves.linear,
-            builder: (context, value, _) => CircularProgressIndicator(
+          AnimatedBuilder(
+            animation: _progressController,
+            builder: (context, child) => CircularProgressIndicator(
               value: _currentEvent.isWaitingForHr 
                   ? null 
-                  : (_currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED ? 1.0 : value),
+                  : _progressController.value,
               strokeWidth: strokeWidth,
               backgroundColor: stateColor.withOpacity(0.2),
               valueColor: AlwaysStoppedAnimation<Color>(stateColor),
@@ -495,11 +528,27 @@ class _TimerScreenState extends State<TimerScreen> {
               icon: const Icon(Icons.play_arrow),
               label: const Text('START WORKOUT'),
             )
-          : FloatingActionButton.extended(
-              onPressed: _stopWorkout,
-              backgroundColor: Theme.of(context).colorScheme.error,
-              icon: const Icon(Icons.stop),
-              label: const Text('END WORKOUT'),
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FloatingActionButton.extended(
+                  heroTag: 'pause_btn',
+                  onPressed: () => _engine?.pause(),
+                  backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
+                      ? Theme.of(context).colorScheme.secondary 
+                      : Colors.orange,
+                  icon: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
+                  label: Text(_currentEvent.state == WorkoutState.PAUSED ? 'RESUME' : 'PAUSE'),
+                ),
+                const SizedBox(width: 16),
+                FloatingActionButton.extended(
+                  heroTag: 'stop_btn',
+                  onPressed: _stopWorkout,
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  icon: const Icon(Icons.stop),
+                  label: const Text('END WORKOUT'),
+                ),
+              ],
             ),
     );
   }
