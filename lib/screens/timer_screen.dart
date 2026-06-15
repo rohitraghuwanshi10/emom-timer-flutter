@@ -371,7 +371,7 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
         stateText = 'READY';
         break;
       case WorkoutState.PREP:
-        stateColor = Colors.orange;
+        stateColor = Colors.amber;
         stateText = 'PREPARE';
         break;
       case WorkoutState.WORK:
