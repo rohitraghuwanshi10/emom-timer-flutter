@@ -11,10 +11,10 @@ class TimerScreen extends StatefulWidget {
   const TimerScreen({Key? key}) : super(key: key);
 
   @override
-  State<TimerScreen> createState() => _TimerScreenState();
+  State<TimerScreen> createState() => TimerScreenState();
 }
 
-class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStateMixin {
+class TimerScreenState extends State<TimerScreen> with SingleTickerProviderStateMixin {
   WorkoutEngine? _engine;
   StreamSubscription? _workoutSubscription;
   StreamSubscription? _hrSubscription;
@@ -58,11 +58,11 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
     super.initState();
     _progressController = AnimationController(vsync: this);
     AudioService.instance; // Force lazy-init to eagerly preload audio assets
-    _loadProfileSettings();
+    loadProfileSettings();
     _setupBluetooth();
   }
 
-  Future<void> _loadProfileSettings() async {
+  Future<void> loadProfileSettings() async {
     try {
       final activeProfile = await DatabaseHelper.instance.getActiveProfileName();
       final db = await DatabaseHelper.instance.database;
@@ -661,7 +661,13 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('EMOM Timer'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('EMOM Timer'),
+            Text('Profile: $_profileName', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
         actions: [
           IconButton(
             icon: Icon(

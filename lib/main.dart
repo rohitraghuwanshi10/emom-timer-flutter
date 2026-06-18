@@ -66,23 +66,28 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
-
-  final List<Widget> _screens = [
-    const TimerScreen(),
-    const HistoryScreen(),
-    const ProfileScreen(),
-  ];
+  final GlobalKey<TimerScreenState> _timerKey = GlobalKey<TimerScreenState>();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          TimerScreen(key: _timerKey),
+          const HistoryScreen(),
+          const ProfileScreen(),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() {
             _currentIndex = index;
           });
+          if (index == 0) {
+            _timerKey.currentState?.loadProfileSettings();
+          }
         },
         items: const [
           BottomNavigationBarItem(
