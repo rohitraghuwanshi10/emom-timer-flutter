@@ -40,6 +40,19 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
     isWaitingForHr: false,
   );
 
+  bool _saveHistoryEnabled = true;
+  final TextEditingController _notesController = TextEditingController();
+  
+  // Cache variables for calorie/zone calculations
+  int _maxHr = 180;
+  String? _birthDate;
+  String? _sex;
+  double _weightKg = 70.0;
+
+  // Session data
+  List<Map<String, dynamic>> _hrDetails = [];
+  DateTime? _workoutStartTime;
+
   @override
   void initState() {
     super.initState();
@@ -60,11 +73,21 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
           setState(() {
             _maxPreworkHr = profile['max_prework_hr'] as int? ?? 130;
             _profileName = activeProfile;
+            _maxHr = profile['max_hr'] as int? ?? 180;
+            _birthDate = profile['birth_date'] as String?;
+            _sex = profile['sex'] as String?;
+            _weightKg = profile['weight_kg'] as double? ?? 70.0;
           });
+          
+          final autoConnect = profile['auto_connect_hr'] as int? ?? 1;
+          if (autoConnect == 1) {
+            print("TimerScreen: Profile auto_connect_hr is enabled. Starting auto-connect...");
+            AppBluetoothService.instance.startScanAndConnect();
+          }
         }
       }
     } catch (e) {
-      print('Error loading profile in timer: \$e');
+      print('Error loading profile in timer: $e');
     }
   }
 
@@ -87,6 +110,9 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
     _engine?.dispose(); // clean up any old engine
     _workoutSubscription?.cancel();
 
+    _hrDetails = [];
+    _workoutStartTime = DateTime.now();
+
     _engine = WorkoutEngine(
       totalRounds: _totalRounds,
       workDuration: _workDuration,
@@ -99,6 +125,13 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
       setState(() {
         _currentEvent = event;
       });
+      
+      _recordHrTick(event.state);
+
+      if (event.state == WorkoutState.FINISHED) {
+        _saveWorkoutToDb();
+        _resetToIdle();
+      }
       
       // Play sounds on transitions
       if (event.timeRemaining == _workDuration && event.state == WorkoutState.WORK) {
@@ -145,7 +178,13 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
   }
 
   void _stopWorkout() {
-    _engine?.stop();
+    if (_engine != null) {
+      final completedRounds = _getCompletedRounds();
+      if (completedRounds > 0) {
+        _saveWorkoutToDb(completedRoundsOverride: completedRounds);
+      }
+      _engine?.stop();
+    }
     _workoutSubscription?.cancel();
     _resetToIdle();
   }
@@ -166,12 +205,140 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
 
   @override
   void dispose() {
+    _notesController.dispose();
     _progressController.dispose();
     _workoutSubscription?.cancel();
     _hrSubscription?.cancel();
     _btStateSubscription?.cancel();
     _engine?.dispose();
     super.dispose();
+  }
+
+  void _recordHrTick(WorkoutState state) {
+    if (state == WorkoutState.WORK || state == WorkoutState.REST || state == WorkoutState.PREP) {
+      if (_currentHr > 0) {
+        final zoneStr = _calculateZone(_currentHr);
+        _hrDetails.add({
+          'capture_time': DateTime.now().toIso8601String().substring(0, 19),
+          'bpm': _currentHr,
+          'zone': zoneStr,
+        });
+      }
+    }
+  }
+
+  int _getCompletedRounds() {
+    if (_engine == null) return 0;
+    final currentRound = _currentEvent.currentRound;
+    if (currentRound == 0) return 0;
+
+    final activeState = _currentEvent.state == WorkoutState.PAUSED 
+        ? (_currentEvent.prevState ?? WorkoutState.WORK) 
+        : _currentEvent.state;
+
+    if (activeState == WorkoutState.WORK) {
+      final completedWork = _workDuration - _currentEvent.timeRemaining;
+      if (completedWork > (_workDuration / 2)) {
+        return currentRound;
+      } else {
+        return currentRound - 1;
+      }
+    } else {
+      return currentRound;
+    }
+  }
+
+  int _calculateAge(String birthDateStr) {
+    try {
+      final birth = DateTime.parse(birthDateStr);
+      final today = DateTime.now();
+      int age = today.year - birth.year;
+      if (today.month < birth.month || (today.month == birth.month && today.day < birth.day)) {
+        age--;
+      }
+      return age;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  String _calculateZone(int bpm) {
+    if (_maxHr <= 0) return '';
+    final pct = (bpm / _maxHr) * 100;
+    if (pct < 50) return 'WARM UP';
+    if (pct < 60) return 'ZONE 1';
+    if (pct < 70) return 'ZONE 2';
+    if (pct < 80) return 'ZONE 3';
+    if (pct < 90) return 'ZONE 4';
+    return 'ZONE 5';
+  }
+
+  Future<void> _saveWorkoutToDb({int? completedRoundsOverride}) async {
+    if (!_saveHistoryEnabled) return;
+    if (_engine == null || _workoutStartTime == null) return;
+
+    final completedRounds = completedRoundsOverride ?? _getCompletedRounds();
+    if (completedRounds <= 0) return;
+
+    try {
+      final endTime = DateTime.now();
+      final duration = _engine!.workTimeSec;
+      final rest = _engine!.restTimeSec;
+      final totalTime = duration + rest;
+
+      int maxHr = 0;
+      int avgHr = 0;
+      if (_hrDetails.isNotEmpty) {
+        final bpms = _hrDetails.map((x) => x['bpm'] as int).toList();
+        maxHr = bpms.reduce((a, b) => a > b ? a : b);
+        avgHr = (bpms.reduce((a, b) => a + b) / bpms.length).round();
+      }
+
+      double caloriesBurnt = 0.0;
+      if (_birthDate != null && _sex != null && avgHr > 0) {
+        final age = _calculateAge(_birthDate!);
+        final totalMins = totalTime / 60.0;
+        double weight = _weightKg;
+        
+        double cpm;
+        if (_sex == 'Male') {
+          cpm = (-55.0969 + (0.6309 * avgHr) + (0.1988 * weight) + (0.2017 * age)) / 4.184;
+        } else {
+          cpm = (-20.4022 + (0.4472 * avgHr) - (0.1263 * weight) + (0.074 * age)) / 4.184;
+        }
+        caloriesBurnt = cpm * totalMins;
+        if (caloriesBurnt < 0) caloriesBurnt = 0.0;
+        caloriesBurnt = double.parse(caloriesBurnt.toStringAsFixed(2));
+      }
+
+      final notes = _notesController.text;
+      
+      final workoutId = await DatabaseHelper.instance.saveWorkout(
+        profileName: _profileName,
+        startTime: _workoutStartTime!.toIso8601String().substring(0, 19),
+        endTime: endTime.toIso8601String().substring(0, 19),
+        totalRoundsCompleted: completedRounds,
+        workDuration: _workDuration,
+        restDuration: _restDuration,
+        totalTimeSec: totalTime,
+        workTimeSec: duration,
+        restTimeSec: rest,
+        maxHr: maxHr,
+        avgHr: avgHr,
+        caloriesBurntKcal: caloriesBurnt,
+        notes: notes,
+        hrLogs: _hrDetails,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Workout saved successfully! ID: $workoutId, Calories: $caloriesBurnt kcal')),
+        );
+        _notesController.clear();
+      }
+    } catch (e) {
+      print('TimerScreen: Error saving workout: $e');
+    }
   }
 
   Future<void> _showSaveTemplateDialog() async {
@@ -350,6 +517,23 @@ class _TimerScreenState extends State<TimerScreen> with SingleTickerProviderStat
               subtitle: Text('Hold rest until HR < $_maxPreworkHr'),
               value: _autoRegulationEnabled,
               onChanged: (val) => setState(() => _autoRegulationEnabled = val),
+            ),
+            SwitchListTile(
+              title: const Text('Save History'),
+              subtitle: const Text('Record workout and heart rate logs to database'),
+              value: _saveHistoryEnabled,
+              onChanged: (val) => setState(() => _saveHistoryEnabled = val),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _notesController,
+              decoration: const InputDecoration(
+                labelText: 'Workout Notes',
+                hintText: 'Enter notes for this workout...',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.note),
+              ),
+              maxLines: 2,
             ),
           ],
         ),

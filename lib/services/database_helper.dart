@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -193,5 +192,58 @@ class DatabaseHelper {
       whereArgs: [workoutId],
       orderBy: 'capture_time ASC'
     );
+  }
+
+  Future<int?> saveWorkout({
+    required String profileName,
+    required String startTime,
+    required String endTime,
+    required int totalRoundsCompleted,
+    required int workDuration,
+    required int restDuration,
+    required int totalTimeSec,
+    required int workTimeSec,
+    required int restTimeSec,
+    required int maxHr,
+    required int avgHr,
+    required double caloriesBurntKcal,
+    required String notes,
+    required List<Map<String, dynamic>> hrLogs,
+  }) async {
+    final db = await database;
+    try {
+      return await db.transaction((txn) async {
+        final workoutId = await txn.insert('workouts', {
+          'profile_name': profileName,
+          'start_time': startTime,
+          'end_time': endTime,
+          'total_rounds_completed': totalRoundsCompleted,
+          'work_duration': workDuration,
+          'rest_duration': restDuration,
+          'total_time_sec': totalTimeSec,
+          'work_time_sec': workTimeSec,
+          'rest_time_sec': restTimeSec,
+          'max_hr': maxHr,
+          'avg_hr': avgHr,
+          'calories_burnt_kcal': caloriesBurntKcal,
+          'notes': notes,
+        });
+
+        for (var log in hrLogs) {
+          await txn.insert('heart_rate_logs', {
+            'workout_id': workoutId,
+            'capture_time': log['capture_time'],
+            'bpm': log['bpm'],
+            'zone': log['zone'],
+          });
+        }
+
+        print('DatabaseHelper: Workout saved with ID: $workoutId, logs: ${hrLogs.length}');
+        return workoutId;
+      });
+    } catch (e) {
+      print('DatabaseHelper: Error saving workout: $e');
+      return null;
+    }
   }
 }

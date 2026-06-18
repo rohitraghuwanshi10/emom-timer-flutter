@@ -127,18 +127,30 @@ class WorkoutEngine {
         break;
       case WorkoutState.WORK:
         if (baseRestDuration <= 0) {
-          _currentRound++;
-          _state = WorkoutState.WORK;
-          _timeRemaining = workDuration;
+          if (_currentRound >= totalRounds) {
+            _state = WorkoutState.FINISHED;
+            _timeRemaining = 0;
+            _timer?.cancel();
+          } else {
+            _currentRound++;
+            _state = WorkoutState.WORK;
+            _timeRemaining = workDuration;
+          }
         } else {
           _state = WorkoutState.REST;
           _timeRemaining = baseRestDuration;
         }
         break;
       case WorkoutState.REST:
-        _currentRound++;
-        _state = WorkoutState.WORK;
-        _timeRemaining = workDuration;
+        if (_currentRound >= totalRounds) {
+          _state = WorkoutState.FINISHED;
+          _timeRemaining = 0;
+          _timer?.cancel();
+        } else {
+          _currentRound++;
+          _state = WorkoutState.WORK;
+          _timeRemaining = workDuration;
+        }
         break;
       default:
         break;

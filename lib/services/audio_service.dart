@@ -22,7 +22,7 @@ class AudioService {
     // Configure audio context to duck other sounds (e.g. Spotify) instead of pausing them
     final ctx = AudioContext(
       iOS: AudioContextIOS(
-        category: AVAudioSessionCategory.ambient, // ambient allows mixing
+        category: AVAudioSessionCategory.playback, // playback allows explicit mixing & ducking
         options: {
           AVAudioSessionOptions.duckOthers,
           AVAudioSessionOptions.mixWithOthers,

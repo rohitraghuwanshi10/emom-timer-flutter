@@ -53,12 +53,14 @@ class _DetailsScreenState extends State<DetailsScreen> {
       // Get HR logs
       for (var w in _workouts) {
         final int wid = w['id'] as int;
-        _hrLogs[wid] = await DatabaseHelper.instance.getHeartRateLogs(wid);
+        final logs = await DatabaseHelper.instance.getHeartRateLogs(wid);
+        print('DetailsScreen: Workout ID $wid has ${logs.length} HR logs');
+        _hrLogs[wid] = logs;
       }
 
       setState(() => _isLoading = false);
     } catch (e) {
-      print('Error loading details: \$e');
+      print('Error loading details: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -164,6 +166,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       }
 
       if (spots.isNotEmpty) {
+        print('DetailsScreen: Created ${spots.length} FlSpots for workout ID ${w['id']}. First spot: ${spots.first.x}, ${spots.first.y}. Last spot: ${spots.last.x}, ${spots.last.y}');
         lineBarsData.add(
           LineChartBarData(
             spots: spots,
@@ -180,6 +183,8 @@ class _DetailsScreenState extends State<DetailsScreen> {
         );
         offsetMin = spots.last.x + gapMin;
         if (offsetMin > maxX) maxX = offsetMin;
+      } else {
+        print('DetailsScreen: No spots created for workout ID ${w['id']}');
       }
     }
 
