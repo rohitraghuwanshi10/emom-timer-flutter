@@ -49,7 +49,7 @@ class EmomTimerApp extends StatelessWidget {
         bottomNavigationBarTheme: BottomNavigationBarThemeData(
           backgroundColor: nord1,
           selectedItemColor: nord8,
-          unselectedItemColor: nord3,
+          unselectedItemColor: nord4.withOpacity(0.6),
         ),
       ),
       home: const MainNavigationScreen(),

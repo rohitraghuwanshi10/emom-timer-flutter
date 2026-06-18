@@ -43,8 +43,9 @@ dependencies:
   audioplayers: ^6.7.1
   health: ^3.0.6
   window_manager: ^0.5.1
-  wakelock_plus: ^1.6.1
+  wakelock_plus: ^1.2.8
   path: ^1.9.1
+  file_picker: ^8.0.0
 
 dev_dependencies:
   flutter_test:

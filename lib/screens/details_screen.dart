@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/database_helper.dart';
 
 class DetailsScreen extends StatefulWidget {
@@ -65,6 +67,85 @@ class _DetailsScreenState extends State<DetailsScreen> {
     }
   }
 
+  Future<void> _exportToCsv() async {
+    print('DetailsScreen: _exportToCsv button clicked!');
+    if (_workouts.isEmpty) {
+      print('DetailsScreen: _workouts is empty, returning.');
+      return;
+    }
+
+    final String cleanDateStr = widget.dateStr.replaceAll(' ', '_').replaceAll(',', '');
+    final String defaultFileName = "${widget.profileName}_${cleanDateStr}_workouts.csv";
+    print('DetailsScreen: defaultFileName is $defaultFileName');
+
+    try {
+      print('DetailsScreen: Calling FilePicker.platform.saveFile()...');
+      final String? path = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export Day\'s Workouts to CSV',
+        fileName: defaultFileName,
+        allowedExtensions: ['csv'],
+        type: FileType.custom,
+      );
+      print('DetailsScreen: saveFile returned path: $path');
+
+      if (path == null) {
+        print('DetailsScreen: User cancelled save file dialog.');
+        return;
+      }
+
+      // Generate CSV string
+      final StringBuffer csvBuffer = StringBuffer();
+      
+      // Header row
+      csvBuffer.writeln('Workout,Start Time,Rounds,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),Calories (kcal),Notes');
+
+      for (int i = 0; i < _workouts.length; i++) {
+        final w = _workouts[i];
+        
+        String startStr = '--';
+        try {
+          final dt = DateTime.parse(w['start_time'] as String).toLocal();
+          final String period = dt.hour >= 12 ? 'PM' : 'AM';
+          final int hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+          startStr = "$hour12:${dt.minute.toString().padLeft(2, '0')} $period";
+        } catch (_) {}
+
+        final String rounds = "${w['total_rounds_completed'] ?? 0}";
+        final String totalTime = _fmtSec(w['total_time_sec']);
+        final String workTime = _fmtSec(w['work_time_sec']);
+        final String restTime = _fmtSec(w['rest_time_sec']);
+        final String peakHr = _fmtHr(w['max_hr']);
+        final String avgHr = _fmtHr(w['avg_hr']);
+        final String calories = (w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--';
+        
+        // Escape notes for CSV
+        String notes = w['notes'] as String? ?? '';
+        if (notes.contains(',') || notes.contains('"') || notes.contains('\n') || notes.contains('\r')) {
+          notes = '"' + notes.replaceAll('"', '""') + '"';
+        }
+
+        csvBuffer.writeln('WO ${i + 1},$startStr,$rounds,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$notes');
+      }
+
+      // Write to file
+      final file = File(path);
+      await file.writeAsString(csvBuffer.toString());
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Successfully exported to $path')),
+        );
+      }
+    } catch (e) {
+      print('Error exporting to CSV: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export CSV: $e')),
+        );
+      }
+    }
+  }
+
   String _fmtSec(dynamic secObj) {
     if (secObj == null) return '--';
     int sec = (secObj as num).toInt();
@@ -100,6 +181,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
           DataColumn(label: Text('Peak HR')),
           DataColumn(label: Text('Avg HR')),
           DataColumn(label: Text('Cals (kcal)')),
+          DataColumn(label: Text('Notes')),
         ],
         rows: _workouts.asMap().entries.map((e) {
           int idx = e.key;
@@ -122,6 +204,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
             DataCell(Text(_fmtHr(w['max_hr']), style: const TextStyle(color: Color(0xFFBF616A)))), // Red
             DataCell(Text(_fmtHr(w['avg_hr']), style: const TextStyle(color: Color(0xFF5E81AC)))), // Blue
             DataCell(Text("${(w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--'}", style: const TextStyle(color: Color(0xFFB48EAD)))), // Purple
+            DataCell(Text(w['notes'] as String? ?? '', style: const TextStyle(color: Colors.grey))),
           ]);
         }).toList(),
       ),
@@ -249,6 +332,14 @@ class _DetailsScreenState extends State<DetailsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Details: ${widget.dateStr}'),
+        actions: [
+          if (!_isLoading && _workouts.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: 'Export Day to CSV',
+              onPressed: _exportToCsv,
+            ),
+        ],
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
