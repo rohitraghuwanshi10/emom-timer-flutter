@@ -33,7 +33,7 @@ class EmomTimerApp extends StatelessWidget {
     final Color nord14 = const Color(0xFFA3BE8C); // Aurora (Green/Go)
 
     return MaterialApp(
-      title: 'EMOM Timer',
+      title: 'ChronoPulse Active',
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: nord0,

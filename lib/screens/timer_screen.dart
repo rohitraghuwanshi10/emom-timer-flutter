@@ -668,7 +668,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('EMOM Timer'),
+            const Text('ChronoPulse Active'),
             Text('Profile: $_profileName', style: const TextStyle(fontSize: 12, color: Colors.grey)),
           ],
         ),
