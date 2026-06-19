@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'screens/timer_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/profile_screen.dart';
@@ -10,15 +9,13 @@ void main() {
 }
 
 class EmomTimerApp extends StatelessWidget {
-  const EmomTimerApp({Key? key}) : super(key: key);
+  const EmomTimerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     // Nord Theme Colors
     final Color nord0 = const Color(0xFF2E3440); // Polar Night (Background)
     final Color nord1 = const Color(0xFF3B4252);
-    final Color nord2 = const Color(0xFF434C5E);
-    final Color nord3 = const Color(0xFF4C566A);
     final Color nord4 = const Color(0xFFD8DEE9); // Snow Storm (Text)
     final Color nord6 = const Color(0xFFECEFF4);
     final Color nord8 = const Color(0xFF88C0D0); // Frost (Accent)
@@ -49,7 +46,7 @@ class EmomTimerApp extends StatelessWidget {
         bottomNavigationBarTheme: BottomNavigationBarThemeData(
           backgroundColor: nord1,
           selectedItemColor: nord8,
-          unselectedItemColor: nord4.withOpacity(0.6),
+          unselectedItemColor: nord4.withValues(alpha: 0.6),
         ),
       ),
       home: const MainNavigationScreen(),
@@ -58,11 +55,12 @@ class EmomTimerApp extends StatelessWidget {
 }
 
 class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({Key? key}) : super(key: key);
+  const MainNavigationScreen({super.key});
 
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
+
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;

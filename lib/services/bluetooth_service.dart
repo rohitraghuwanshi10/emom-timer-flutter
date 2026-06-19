@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
@@ -17,29 +18,29 @@ class AppBluetoothService {
   Stream<BluetoothConnectionState> get deviceStateStream => _deviceStateController.stream;
 
   Future<void> startScanAndConnect({String targetName = 'Polar H10'}) async {
-    print("BluetoothService: Requesting stop scan...");
+    debugPrint("BluetoothService: Requesting stop scan...");
     try {
       await FlutterBluePlus.stopScan();
     } catch (_) {}
 
-    print("BluetoothService: Checking system devices...");
+    debugPrint("BluetoothService: Checking system devices...");
     try {
       // First check if the device is already connected to the system
       List<BluetoothDevice> connectedDevices = await FlutterBluePlus.systemDevices([]);
-      print("BluetoothService: Found ${connectedDevices.length} system devices.");
+      debugPrint("BluetoothService: Found ${connectedDevices.length} system devices.");
       for (var device in connectedDevices) {
-        print("BluetoothService: System device: ${device.platformName} / ${device.advName}");
+        debugPrint("BluetoothService: System device: ${device.platformName} / ${device.advName}");
         if (device.advName.contains(targetName) || device.platformName.contains(targetName)) {
-          print("BluetoothService: Found target in system devices! Connecting...");
+          debugPrint("BluetoothService: Found target in system devices! Connecting...");
           await _connectToDevice(device);
           return; // Already found and connected!
         }
       }
     } catch (e) {
-      print("BluetoothService: System devices check failed: $e");
+      debugPrint("BluetoothService: System devices check failed: $e");
     }
 
-    print("BluetoothService: Starting active scan...");
+    debugPrint("BluetoothService: Starting active scan...");
     _scanSubscription?.cancel();
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
       for (ScanResult r in results) {
@@ -47,13 +48,13 @@ class AppBluetoothService {
         final advName = r.device.advName;
         final serviceUuids = r.advertisementData.serviceUuids;
         
-        print("BluetoothService: Scan result - Device: $platformName / $advName, Services: $serviceUuids");
+        debugPrint("BluetoothService: Scan result - Device: $platformName / $advName, Services: $serviceUuids");
         
         bool hasHrService = serviceUuids.any((uuid) => uuid.toString().toLowerCase().contains('180d'));
         bool matchesName = advName.contains(targetName) || platformName.contains(targetName);
         
         if (hasHrService || matchesName) {
-          print("BluetoothService: MATCH FOUND in scan: $platformName ($advName). Connecting...");
+          debugPrint("BluetoothService: MATCH FOUND in scan: $platformName ($advName). Connecting...");
           FlutterBluePlus.stopScan();
           _connectToDevice(r.device);
           break;
@@ -68,20 +69,20 @@ class AppBluetoothService {
         withServices: [Guid("180D")],
         continuousUpdates: true,
       );
-      print("BluetoothService: Scan started successfully with service filter [180D].");
+      debugPrint("BluetoothService: Scan started successfully with service filter [180D].");
     } catch (e) {
-      print("BluetoothService: startScan failed: $e");
+      debugPrint("BluetoothService: startScan failed: $e");
       // If it fails (e.g. bluetooth is currently off, or permissions haven't popped up yet),
       // we listen for it to turn on and then retry
       FlutterBluePlus.adapterState.listen((state) {
-        print("BluetoothService: Adapter state changed to: $state");
+        debugPrint("BluetoothService: Adapter state changed to: $state");
         if (state == BluetoothAdapterState.on) {
-          print("BluetoothService: Retrying startScan...");
+          debugPrint("BluetoothService: Retrying startScan...");
           FlutterBluePlus.startScan(
             withServices: [Guid("180D")],
             continuousUpdates: true,
           ).catchError((e) {
-            print("BluetoothService: Retry startScan failed: $e");
+            debugPrint("BluetoothService: Retry startScan failed: $e");
           });
         }
       });
@@ -89,18 +90,18 @@ class AppBluetoothService {
   }
 
   Future<void> _connectToDevice(BluetoothDevice device) async {
-    print("BluetoothService: Connecting to ${device.remoteId}...");
+    debugPrint("BluetoothService: Connecting to ${device.remoteId}...");
     _connectedDevice = device;
     
     _connectionSubscription = device.connectionState.listen((state) async {
       _deviceStateController.add(state);
-      print("BluetoothService: Connection state: $state");
+      debugPrint("BluetoothService: Connection state: $state");
       
       if (state == BluetoothConnectionState.connected) {
-        print("BluetoothService: Connected! Discovering services...");
+        debugPrint("BluetoothService: Connected! Discovering services...");
         await _discoverAndSubscribe(device);
       } else if (state == BluetoothConnectionState.disconnected) {
-        print("BluetoothService: Disconnected. Will attempt auto-reconnect.");
+        debugPrint("BluetoothService: Disconnected. Will attempt auto-reconnect.");
         _hrSubscription?.cancel();
         // The native OS will automatically attempt to reconnect because we use autoConnect: true
         // However, we can also manually trigger a reconnect if it drops completely
@@ -118,15 +119,15 @@ class AppBluetoothService {
 
   Future<void> _discoverAndSubscribe(BluetoothDevice device) async {
     List<BluetoothService> services = await device.discoverServices();
-    print("BluetoothService: Discovered ${services.length} services.");
+    debugPrint("BluetoothService: Discovered ${services.length} services.");
     for (var service in services) {
       // 0x180D is the UUID for Heart Rate Service
       if (service.uuid.toString().toLowerCase().contains('180d')) {
-        print("BluetoothService: Found HR Service!");
+        debugPrint("BluetoothService: Found HR Service!");
         for (var characteristic in service.characteristics) {
           // 0x2A37 is the UUID for Heart Rate Measurement Characteristic
           if (characteristic.uuid.toString().toLowerCase().contains('2a37')) {
-            print("BluetoothService: Found HR Characteristic! Subscribing...");
+            debugPrint("BluetoothService: Found HR Characteristic! Subscribing...");
             await characteristic.setNotifyValue(true);
             _hrSubscription = characteristic.lastValueStream.listen((value) {
               if (value.isNotEmpty) {

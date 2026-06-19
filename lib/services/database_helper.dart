@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
-import 'package:sqflite/sqflite.dart';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 
@@ -28,7 +28,7 @@ class DatabaseHelper {
           return config['base_dir'] as String;
         }
       } catch (e) {
-        print('Error reading config: $e');
+        debugPrint('Error reading config: $e');
       }
     }
     
@@ -47,7 +47,7 @@ class DatabaseHelper {
           return config['last_used_profile'] as String;
         }
       } catch (e) {
-        print('Error reading config for profile: \$e');
+        debugPrint('Error reading config for profile: $e');
       }
     }
     
@@ -238,11 +238,11 @@ class DatabaseHelper {
           });
         }
 
-        print('DatabaseHelper: Workout saved with ID: $workoutId, logs: ${hrLogs.length}');
+        debugPrint('DatabaseHelper: Workout saved with ID: $workoutId, logs: ${hrLogs.length}');
         return workoutId;
       });
     } catch (e) {
-      print('DatabaseHelper: Error saving workout: $e');
+      debugPrint('DatabaseHelper: Error saving workout: $e');
       return null;
     }
   }

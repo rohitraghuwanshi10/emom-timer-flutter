@@ -1,3 +1,4 @@
+// ignore_for_file: constant_identifier_names
 import 'dart:async';
 
 enum WorkoutState { IDLE, PREP, WORK, REST, PAUSED, FINISHED }

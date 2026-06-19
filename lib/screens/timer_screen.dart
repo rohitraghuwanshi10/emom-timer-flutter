@@ -8,7 +8,7 @@ import '../services/database_helper.dart';
 import 'package:sqflite/sqflite.dart';
 
 class TimerScreen extends StatefulWidget {
-  const TimerScreen({Key? key}) : super(key: key);
+  const TimerScreen({super.key});
 
   @override
   State<TimerScreen> createState() => TimerScreenState();
@@ -81,13 +81,13 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           
           final autoConnect = profile['auto_connect_hr'] as int? ?? 1;
           if (autoConnect == 1) {
-            print("TimerScreen: Profile auto_connect_hr is enabled. Starting auto-connect...");
+            debugPrint("TimerScreen: Profile auto_connect_hr is enabled. Starting auto-connect...");
             AppBluetoothService.instance.startScanAndConnect();
           }
         }
       }
     } catch (e) {
-      print('Error loading profile in timer: $e');
+      debugPrint('Error loading profile in timer: $e');
     }
   }
 
@@ -337,7 +337,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         _notesController.clear();
       }
     } catch (e) {
-      print('TimerScreen: Error saving workout: $e');
+      debugPrint('TimerScreen: Error saving workout: $e');
     }
   }
 
@@ -365,12 +365,12 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     'work_time': _workDuration,
                     'rest_time': _restDuration,
                   }, conflictAlgorithm: ConflictAlgorithm.replace);
-                  if (mounted) {
+                  if (context.mounted) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Template saved')));
                   }
                 } catch (e) {
-                  print('Error saving template: \$e');
+                  debugPrint('Error saving template: \$e');
                 }
               }
             },
@@ -403,7 +403,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                   icon: const Icon(Icons.delete, color: Colors.red),
                   onPressed: () async {
                     await db.delete('workout_templates', where: 'id = ?', whereArgs: [t['id']]);
-                    if (mounted) {
+                    if (context.mounted) {
                       Navigator.pop(context); // Close the sheet to refresh
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Template deleted')));
                     }
@@ -424,7 +424,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         );
       }
     } catch (e) {
-      print('Error loading templates: \$e');
+      debugPrint('Error loading templates: \$e');
     }
   }
 
@@ -623,7 +623,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                   ? null 
                   : _progressController.value,
               strokeWidth: strokeWidth,
-              backgroundColor: stateColor.withOpacity(0.2),
+              backgroundColor: stateColor.withValues(alpha: 0.2),
               valueColor: AlwaysStoppedAnimation<Color>(stateColor),
             ),
           ),

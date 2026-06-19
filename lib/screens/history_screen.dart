@@ -3,7 +3,7 @@ import '../services/database_helper.dart';
 import 'details_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({Key? key}) : super(key: key);
+  const HistoryScreen({super.key});
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -40,7 +40,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading history: $e');
+      debugPrint('Error loading history: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -86,7 +86,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                      backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                       child: const Icon(Icons.calendar_today),
                     ),
                     title: Text(_formatDate(dateStr), style: const TextStyle(fontWeight: FontWeight.bold)),

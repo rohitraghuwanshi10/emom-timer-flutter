@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 // Mock HealthService to bypass compilation issues with outdated health package APIs
 class HealthService {
@@ -7,7 +8,7 @@ class HealthService {
 
   Future<bool> requestPermissions() async {
     if (Platform.isMacOS) return false;
-    print("Health permissions requested.");
+    debugPrint("Health permissions requested.");
     return true;
   }
 
@@ -19,6 +20,6 @@ class HealthService {
     List<Map<String, dynamic>> heartRateData = const [],
   }) async {
     if (Platform.isMacOS) return;
-    print("Workout saved to Apple Health / Health Connect: \$title, \$totalCalories kcal");
+    debugPrint("Workout saved to Apple Health / Health Connect: $title, $totalCalories kcal");
   }
 }

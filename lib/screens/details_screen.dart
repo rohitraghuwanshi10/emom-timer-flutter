@@ -9,10 +9,10 @@ class DetailsScreen extends StatefulWidget {
   final String profileName;
 
   const DetailsScreen({
-    Key? key, 
+    super.key, 
     required this.dateStr, 
     required this.profileName,
-  }) : super(key: key);
+  });
 
   @override
   State<DetailsScreen> createState() => _DetailsScreenState();
@@ -21,7 +21,7 @@ class DetailsScreen extends StatefulWidget {
 class _DetailsScreenState extends State<DetailsScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _workouts = [];
-  Map<int, List<Map<String, dynamic>>> _hrLogs = {};
+  final Map<int, List<Map<String, dynamic>>> _hrLogs = {};
   int _maxHr = 180;
 
   final List<Color> _nordColors = const [
@@ -56,40 +56,40 @@ class _DetailsScreenState extends State<DetailsScreen> {
       for (var w in _workouts) {
         final int wid = w['id'] as int;
         final logs = await DatabaseHelper.instance.getHeartRateLogs(wid);
-        print('DetailsScreen: Workout ID $wid has ${logs.length} HR logs');
+        debugPrint('DetailsScreen: Workout ID $wid has ${logs.length} HR logs');
         _hrLogs[wid] = logs;
       }
 
       setState(() => _isLoading = false);
     } catch (e) {
-      print('Error loading details: $e');
+      debugPrint('Error loading details: $e');
       setState(() => _isLoading = false);
     }
   }
 
   Future<void> _exportToCsv() async {
-    print('DetailsScreen: _exportToCsv button clicked!');
+    debugPrint('DetailsScreen: _exportToCsv button clicked!');
     if (_workouts.isEmpty) {
-      print('DetailsScreen: _workouts is empty, returning.');
+      debugPrint('DetailsScreen: _workouts is empty, returning.');
       return;
     }
 
     final String cleanDateStr = widget.dateStr.replaceAll(' ', '_').replaceAll(',', '');
     final String defaultFileName = "${widget.profileName}_${cleanDateStr}_workouts.csv";
-    print('DetailsScreen: defaultFileName is $defaultFileName');
+    debugPrint('DetailsScreen: defaultFileName is $defaultFileName');
 
     try {
-      print('DetailsScreen: Calling FilePicker.platform.saveFile()...');
+      debugPrint('DetailsScreen: Calling FilePicker.platform.saveFile()...');
       final String? path = await FilePicker.platform.saveFile(
         dialogTitle: 'Export Day\'s Workouts to CSV',
         fileName: defaultFileName,
         allowedExtensions: ['csv'],
         type: FileType.custom,
       );
-      print('DetailsScreen: saveFile returned path: $path');
+      debugPrint('DetailsScreen: saveFile returned path: $path');
 
       if (path == null) {
-        print('DetailsScreen: User cancelled save file dialog.');
+        debugPrint('DetailsScreen: User cancelled save file dialog.');
         return;
       }
 
@@ -121,7 +121,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
         // Escape notes for CSV
         String notes = w['notes'] as String? ?? '';
         if (notes.contains(',') || notes.contains('"') || notes.contains('\n') || notes.contains('\r')) {
-          notes = '"' + notes.replaceAll('"', '""') + '"';
+          notes = '"${notes.replaceAll('"', '""')}"';
         }
 
         csvBuffer.writeln('WO ${i + 1},$startStr,$rounds,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$notes');
@@ -137,7 +137,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
         );
       }
     } catch (e) {
-      print('Error exporting to CSV: $e');
+      debugPrint('Error exporting to CSV: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to export CSV: $e')),
@@ -203,7 +203,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
             DataCell(Text(_fmtSec(w['rest_time_sec']), style: const TextStyle(color: Color(0xFFD08770)))), // Orange
             DataCell(Text(_fmtHr(w['max_hr']), style: const TextStyle(color: Color(0xFFBF616A)))), // Red
             DataCell(Text(_fmtHr(w['avg_hr']), style: const TextStyle(color: Color(0xFF5E81AC)))), // Blue
-            DataCell(Text("${(w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--'}", style: const TextStyle(color: Color(0xFFB48EAD)))), // Purple
+            DataCell(Text((w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--', style: const TextStyle(color: Color(0xFFB48EAD)))), // Purple
             DataCell(Text(w['notes'] as String? ?? '', style: const TextStyle(color: Colors.grey))),
           ]);
         }).toList(),
@@ -239,7 +239,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       for (var log in logs) {
         try {
           final dt = DateTime.parse(log['capture_time'] as String);
-          if (startTs == null) startTs = dt;
+          startTs ??= dt;
           final double deltaMin = dt.difference(startTs).inSeconds / 60.0;
           final double bpm = (log['bpm'] as num).toDouble();
           
@@ -249,7 +249,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       }
 
       if (spots.isNotEmpty) {
-        print('DetailsScreen: Created ${spots.length} FlSpots for workout ID ${w['id']}. First spot: ${spots.first.x}, ${spots.first.y}. Last spot: ${spots.last.x}, ${spots.last.y}');
+        debugPrint('DetailsScreen: Created ${spots.length} FlSpots for workout ID ${w['id']}. First spot: ${spots.first.x}, ${spots.first.y}. Last spot: ${spots.last.x}, ${spots.last.y}');
         lineBarsData.add(
           LineChartBarData(
             spots: spots,
@@ -260,14 +260,14 @@ class _DetailsScreenState extends State<DetailsScreen> {
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
-              color: wColor.withOpacity(0.1),
+              color: wColor.withValues(alpha: 0.1),
             ),
           )
         );
         offsetMin = spots.last.x + gapMin;
         if (offsetMin > maxX) maxX = offsetMin;
       } else {
-        print('DetailsScreen: No spots created for workout ID ${w['id']}');
+        debugPrint('DetailsScreen: No spots created for workout ID ${w['id']}');
       }
     }
 
@@ -276,11 +276,11 @@ class _DetailsScreenState extends State<DetailsScreen> {
     // Zones
     final mh = _maxHr.toDouble();
     List<HorizontalLine> zLines = [
-      HorizontalLine(y: 0.6 * mh, color: const Color(0xFF5E81AC).withOpacity(0.3), strokeWidth: 1), // Z1
-      HorizontalLine(y: 0.7 * mh, color: const Color(0xFFA3BE8C).withOpacity(0.3), strokeWidth: 1), // Z2
-      HorizontalLine(y: 0.8 * mh, color: const Color(0xFFEBCB8B).withOpacity(0.3), strokeWidth: 1), // Z3
-      HorizontalLine(y: 0.9 * mh, color: const Color(0xFFD08770).withOpacity(0.3), strokeWidth: 1), // Z4
-      HorizontalLine(y: 1.0 * mh, color: const Color(0xFFBF616A).withOpacity(0.3), strokeWidth: 1), // Z5
+      HorizontalLine(y: 0.6 * mh, color: const Color(0xFF5E81AC).withValues(alpha: 0.3), strokeWidth: 1), // Z1
+      HorizontalLine(y: 0.7 * mh, color: const Color(0xFFA3BE8C).withValues(alpha: 0.3), strokeWidth: 1), // Z2
+      HorizontalLine(y: 0.8 * mh, color: const Color(0xFFEBCB8B).withValues(alpha: 0.3), strokeWidth: 1), // Z3
+      HorizontalLine(y: 0.9 * mh, color: const Color(0xFFD08770).withValues(alpha: 0.3), strokeWidth: 1), // Z4
+      HorizontalLine(y: 1.0 * mh, color: const Color(0xFFBF616A).withValues(alpha: 0.3), strokeWidth: 1), // Z5
     ];
 
     return Container(

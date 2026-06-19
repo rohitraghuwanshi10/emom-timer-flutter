@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/database_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+  const ProfileScreen({super.key});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -48,7 +48,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     } catch (e) {
-      print('Error loading profile: \$e');
+      debugPrint('Error loading profile: \$e');
     }
     setState(() => _isLoading = false);
   }
@@ -74,7 +74,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } catch (e) {
-      print('Error saving profile: \$e');
+      debugPrint('Error saving profile: \$e');
     }
   }
 
@@ -171,10 +171,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   min: 40,
                   max: 150,
                   divisions: 110,
-                  label: '${_weightKg.toStringAsFixed(1)}',
+                  label: _weightKg.toStringAsFixed(1),
                   onChanged: (val) => setState(() => _weightKg = val),
                 ),
-                Text('${_weightKg.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(_weightKg.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
             ),
             SwitchListTile(
