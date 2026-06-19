@@ -10,12 +10,15 @@ class SyncService {
   
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
+  String? _lastError;
+  String? get lastError => _lastError;
 
   SyncService._init();
 
   Future<bool> signInAndSync() async {
     if (_isSyncing) return false;
     _isSyncing = true;
+    _lastError = null;
     
     try {
       // 1. Silent anonymous login
@@ -30,6 +33,7 @@ class SyncService {
       _isSyncing = false;
       return true;
     } catch (e) {
+      _lastError = e.toString();
       debugPrint('SyncService: Error during sync: $e');
       _isSyncing = false;
       return false;

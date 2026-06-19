@@ -24,9 +24,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final success = await SyncService.instance.signInAndSync();
     if (mounted) {
       setState(() => _isSyncing = false);
+      String msg = success 
+          ? 'Sync completed successfully!' 
+          : 'Sync failed: ${SyncService.instance.lastError ?? "Unknown error"}';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? 'Sync completed successfully!' : 'Sync failed. Check logs.'),
+          content: Text(msg),
+          duration: const Duration(seconds: 4),
         ),
       );
       _loadProfile();
