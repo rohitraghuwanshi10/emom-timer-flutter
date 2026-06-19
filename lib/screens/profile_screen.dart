@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/database_helper.dart';
+import '../services/sync_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -10,12 +11,27 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
+  bool _isSyncing = false;
   String _profileName = 'Default';
   List<String> _availableProfiles = [];
   int _maxPreworkHr = 130;
   int _maxHr = 180;
   double _weightKg = 70.0;
   bool _autoConnectHr = true;
+
+  Future<void> _triggerSync() async {
+    setState(() => _isSyncing = true);
+    final success = await SyncService.instance.signInAndSync();
+    if (mounted) {
+      setState(() => _isSyncing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Sync completed successfully!' : 'Sync failed. Check logs.'),
+        ),
+      );
+      _loadProfile();
+    }
+  }
 
   @override
   void initState() {
@@ -182,6 +198,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: const Text('Auto-connect Heart Rate Monitor'),
               value: _autoConnectHr,
               onChanged: (val) => setState(() => _autoConnectHr = val),
+            ),
+            const SizedBox(height: 32),
+            const Text('Cloud Sync', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
+            const SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Sync with Firebase'),
+              subtitle: Text(
+                _isSyncing 
+                    ? 'Synchronizing...' 
+                    : 'Profiles, templates, and history are synced to the cloud.',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: _isSyncing 
+                  ? const SizedBox(
+                      width: 24, 
+                      height: 24, 
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : ElevatedButton.icon(
+                      icon: const Icon(Icons.sync, size: 18),
+                      label: const Text('Sync Now'),
+                      onPressed: _triggerSync,
+                    ),
             ),
           ],
         ),

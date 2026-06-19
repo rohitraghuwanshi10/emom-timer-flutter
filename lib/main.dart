@@ -1,10 +1,20 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'screens/timer_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/profile_screen.dart';
+import 'services/sync_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+    // Trigger initial background sync
+    SyncService.instance.signInAndSync();
+  } catch (e) {
+    debugPrint('Firebase initialization error: $e');
+  }
   runApp(const EmomTimerApp());
 }
 
@@ -64,28 +74,59 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
+  late PageController _pageController;
   final GlobalKey<TimerScreenState> _timerKey = GlobalKey<TimerScreenState>();
+  final GlobalKey<HistoryScreenState> _historyKey = GlobalKey<HistoryScreenState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
+      body: PageView(
+        controller: _pageController,
+        physics: (Platform.isIOS || Platform.isAndroid)
+            ? const BouncingScrollPhysics()
+            : const NeverScrollableScrollPhysics(),
+        onPageChanged: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+          if (index == 0) {
+            _timerKey.currentState?.loadProfileSettings();
+          } else if (index == 1) {
+            _historyKey.currentState?.refreshHistory();
+            SyncService.instance.signInAndSync().then((success) {
+              if (success && mounted && _currentIndex == 1) {
+                _historyKey.currentState?.refreshHistory();
+              }
+            });
+          }
+        },
         children: [
           TimerScreen(key: _timerKey),
-          const HistoryScreen(),
+          HistoryScreen(key: _historyKey),
           const ProfileScreen(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-          if (index == 0) {
-            _timerKey.currentState?.loadProfileSettings();
-          }
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
         },
         items: const [
           BottomNavigationBarItem(

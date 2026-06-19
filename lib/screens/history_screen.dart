@@ -6,13 +6,17 @@ class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
   @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
+  State<HistoryScreen> createState() => HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class HistoryScreenState extends State<HistoryScreen> {
   List<Map<String, dynamic>> _days = [];
   bool _isLoading = true;
   String _profileName = '';
+
+  void refreshHistory() {
+    _loadHistory();
+  }
 
   @override
   void initState() {

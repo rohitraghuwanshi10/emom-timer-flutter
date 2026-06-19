@@ -70,5 +70,9 @@
 	<string>This app needs Bluetooth to connect to your Heart Rate monitor.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>This app needs Bluetooth to connect to your Heart Rate monitor.</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 </dict>
 </plist>

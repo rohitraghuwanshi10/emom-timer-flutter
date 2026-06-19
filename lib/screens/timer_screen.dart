@@ -5,6 +5,7 @@ import '../models/workout_engine.dart';
 import '../services/bluetooth_service.dart';
 import '../services/audio_service.dart';
 import '../services/database_helper.dart';
+import '../services/sync_service.dart';
 import 'package:sqflite/sqflite.dart';
 
 class TimerScreen extends StatefulWidget {
@@ -336,6 +337,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         );
         _notesController.clear();
       }
+      
+      // Trigger background sync to upload the newly saved workout
+      SyncService.instance.signInAndSync();
     } catch (e) {
       debugPrint('TimerScreen: Error saving workout: $e');
     }

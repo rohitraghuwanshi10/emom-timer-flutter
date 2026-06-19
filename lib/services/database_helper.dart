@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -16,10 +17,17 @@ class DatabaseHelper {
     return _database!;
   }
 
-  Future<String> _getBaseDir() async {
+  Future<File> _getConfigFile() async {
+    if (Platform.isIOS || Platform.isAndroid) {
+      final documentsDir = await getApplicationDocumentsDirectory();
+      return File(join(documentsDir.path, '.emom_timer_config.json'));
+    }
     final home = Platform.environment['HOME'] ?? '';
-    final configFile = File(join(home, '.emom_timer_config.json'));
-    
+    return File(join(home, '.emom_timer_config.json'));
+  }
+
+  Future<String> _getBaseDir() async {
+    final configFile = await _getConfigFile();
     if (await configFile.exists()) {
       try {
         final content = await configFile.readAsString();
@@ -32,12 +40,12 @@ class DatabaseHelper {
       }
     }
     
-    return join(home, 'Documents', 'EMOM Timer');
+    final documentsDir = await getApplicationDocumentsDirectory();
+    return join(documentsDir.path, 'EMOM Timer');
   }
 
   Future<String> getActiveProfileName() async {
-    final home = Platform.environment['HOME'] ?? '';
-    final configFile = File(join(home, '.emom_timer_config.json'));
+    final configFile = await _getConfigFile();
     
     if (await configFile.exists()) {
       try {
@@ -62,8 +70,7 @@ class DatabaseHelper {
   }
 
   Future<void> setActiveProfileName(String name) async {
-    final home = Platform.environment['HOME'] ?? '';
-    final configFile = File(join(home, '.emom_timer_config.json'));
+    final configFile = await _getConfigFile();
     Map<String, dynamic> config = {};
     if (await configFile.exists()) {
       try {
@@ -94,8 +101,16 @@ class DatabaseHelper {
       options: OpenDatabaseOptions(
         version: 1,
         onConfigure: (db) async {
-          await db.execute('PRAGMA journal_mode=WAL');
-          await db.execute('PRAGMA foreign_keys=ON');
+          try {
+            await db.execute('PRAGMA journal_mode=DELETE');
+          } catch (e) {
+            debugPrint('DatabaseHelper: journal_mode setup note: $e');
+          }
+          try {
+            await db.execute('PRAGMA foreign_keys=ON');
+          } catch (e) {
+            debugPrint('DatabaseHelper: foreign_keys setup note: $e');
+          }
         },
         onCreate: _createDB,
       ),
