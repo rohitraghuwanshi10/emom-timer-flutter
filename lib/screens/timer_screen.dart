@@ -29,6 +29,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   bool _autoRegulationEnabled = false;
   int _maxPreworkHr = 130;
   String _profileName = 'Default';
+  List<String> _availableProfiles = [];
   
   int _currentHr = 0;
   bool _isBluetoothConnected = false;
@@ -67,11 +68,16 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     try {
       final activeProfile = await DatabaseHelper.instance.getActiveProfileName();
       final db = await DatabaseHelper.instance.database;
+      
+      // Load all available profiles for dropdown
+      final allProfiles = await db.query('profiles', columns: ['name']);
+      
       final results = await db.query('profiles', where: 'name = ?', whereArgs: [activeProfile], limit: 1);
       if (results.isNotEmpty) {
         final profile = results.first;
         if (mounted) {
           setState(() {
+            _availableProfiles = allProfiles.map((p) => p['name'] as String).toList();
             _maxPreworkHr = profile['max_prework_hr'] as int? ?? 130;
             _profileName = activeProfile;
             _maxHr = profile['max_hr'] as int? ?? 180;
@@ -90,6 +96,11 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     } catch (e) {
       debugPrint('Error loading profile in timer: $e');
     }
+  }
+
+  Future<void> _onProfileChanged(String val) async {
+    await DatabaseHelper.instance.setActiveProfileName(val);
+    await loadProfileSettings();
   }
 
   void _setupBluetooth() {
@@ -394,7 +405,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         showModalBottomSheet(
           context: context,
           builder: (context) => templates.isEmpty 
-            ? const Padding(padding: EdgeInsets.all(32), child: Text('No templates saved for this profile.'))
+            ? const Padding(padding: EdgeInsets.all(32), child: Text('No workouts saved for this profile.'))
             : ListView.builder(
             itemCount: templates.length,
             itemBuilder: (context, index) {
@@ -445,7 +456,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               children: [
                 TextButton.icon(
                   icon: const Icon(Icons.folder_open),
-                  label: const Text('Load Template'),
+                  label: const Text('Select Workout'),
                   onPressed: _showLoadTemplateDialog,
                 ),
                 TextButton.icon(
@@ -659,19 +670,68 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     );
   }
 
+  Widget _buildProfileSelector(bool isIdle) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.person,
+            size: 20,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _availableProfiles.isEmpty
+                ? Text(
+                    _profileName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  )
+                : DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _profileName,
+                      isExpanded: true,
+                      isDense: true,
+                      dropdownColor: Theme.of(context).colorScheme.surface,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
+                      items: _availableProfiles.map((p) {
+                        return DropdownMenuItem(value: p, child: Text(p));
+                      }).toList(),
+                      onChanged: isIdle
+                          ? (val) async {
+                              if (val != null) {
+                                await _onProfileChanged(val);
+                              }
+                            }
+                          : null,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isIdle = _currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED;
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('ChronoPulse Active'),
-            Text('Profile: $_profileName', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          ],
-        ),
+        title: const Text('ChronoPulse Active'),
         actions: [
           IconButton(
             icon: Icon(
@@ -706,7 +766,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 32),
+              const SizedBox(height: 8),
+              _buildProfileSelector(isIdle),
+              const SizedBox(height: 16),
               _buildTimerDisplay(),
               const SizedBox(height: 32),
               if (isIdle) _buildConfigPanel(),

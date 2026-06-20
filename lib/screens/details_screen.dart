@@ -25,12 +25,12 @@ class _DetailsScreenState extends State<DetailsScreen> {
   int _maxHr = 180;
 
   final List<Color> _nordColors = const [
-    Color(0xFF5E81AC), // Blue
-    Color(0xFF88C0D0), // Cyan
-    Color(0xFFA3BE8C), // Green
-    Color(0xFFEBCB8B), // Yellow
-    Color(0xFFD08770), // Orange
-    Color(0xFFB48EAD), // Purple
+    Color(0xFF0DF2A3), // Mint Neon
+    Color(0xFFFF7A00), // Vibrant Orange
+    Color(0xFF38B6FF), // Cyan/Blue
+    Color(0xFFFFD60A), // Yellow
+    Color(0xFFFF3B30), // Red
+    Color(0xFFBF5AF2), // Purple
   ];
 
   @override
@@ -199,11 +199,11 @@ class _DetailsScreenState extends State<DetailsScreen> {
             DataCell(Text(startStr)),
             DataCell(Text("${w['total_rounds_completed'] ?? 0}")),
             DataCell(Text(_fmtSec(w['total_time_sec']))),
-            DataCell(Text(_fmtSec(w['work_time_sec']), style: const TextStyle(color: Color(0xFFA3BE8C)))), // Green
-            DataCell(Text(_fmtSec(w['rest_time_sec']), style: const TextStyle(color: Color(0xFFD08770)))), // Orange
-            DataCell(Text(_fmtHr(w['max_hr']), style: const TextStyle(color: Color(0xFFBF616A)))), // Red
-            DataCell(Text(_fmtHr(w['avg_hr']), style: const TextStyle(color: Color(0xFF5E81AC)))), // Blue
-            DataCell(Text((w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--', style: const TextStyle(color: Color(0xFFB48EAD)))), // Purple
+            DataCell(Text(_fmtSec(w['work_time_sec']), style: const TextStyle(color: Color(0xFF0DF2A3)))), // Mint Neon
+            DataCell(Text(_fmtSec(w['rest_time_sec']), style: const TextStyle(color: Color(0xFFFF7A00)))), // Vibrant Orange
+            DataCell(Text(_fmtHr(w['max_hr']), style: const TextStyle(color: Color(0xFFFF3B30)))), // Neon Red
+            DataCell(Text(_fmtHr(w['avg_hr']), style: const TextStyle(color: Color(0xFF38B6FF)))), // Cyan/Blue
+            DataCell(Text((w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--', style: const TextStyle(color: Color(0xFFBF5AF2)))), // Neon Purple
             DataCell(Text(w['notes'] as String? ?? '', style: const TextStyle(color: Colors.grey))),
           ]);
         }).toList(),
@@ -276,11 +276,11 @@ class _DetailsScreenState extends State<DetailsScreen> {
     // Zones
     final mh = _maxHr.toDouble();
     List<HorizontalLine> zLines = [
-      HorizontalLine(y: 0.6 * mh, color: const Color(0xFF5E81AC).withValues(alpha: 0.3), strokeWidth: 1), // Z1
-      HorizontalLine(y: 0.7 * mh, color: const Color(0xFFA3BE8C).withValues(alpha: 0.3), strokeWidth: 1), // Z2
-      HorizontalLine(y: 0.8 * mh, color: const Color(0xFFEBCB8B).withValues(alpha: 0.3), strokeWidth: 1), // Z3
-      HorizontalLine(y: 0.9 * mh, color: const Color(0xFFD08770).withValues(alpha: 0.3), strokeWidth: 1), // Z4
-      HorizontalLine(y: 1.0 * mh, color: const Color(0xFFBF616A).withValues(alpha: 0.3), strokeWidth: 1), // Z5
+      HorizontalLine(y: 0.6 * mh, color: const Color(0xFF38B6FF).withValues(alpha: 0.3), strokeWidth: 1), // Z1
+      HorizontalLine(y: 0.7 * mh, color: const Color(0xFF0DF2A3).withValues(alpha: 0.3), strokeWidth: 1), // Z2
+      HorizontalLine(y: 0.8 * mh, color: const Color(0xFFFFD60A).withValues(alpha: 0.3), strokeWidth: 1), // Z3
+      HorizontalLine(y: 0.9 * mh, color: const Color(0xFFFF7A00).withValues(alpha: 0.3), strokeWidth: 1), // Z4
+      HorizontalLine(y: 1.0 * mh, color: const Color(0xFFFF3B30).withValues(alpha: 0.3), strokeWidth: 1), // Z5
     ];
 
     return Container(

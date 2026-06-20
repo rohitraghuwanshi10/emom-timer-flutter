@@ -12,27 +12,42 @@ class SyncService {
   bool get isSyncing => _isSyncing;
   String? _lastError;
   String? get lastError => _lastError;
+  String _syncStatus = "Idle";
+  String get syncStatus => _syncStatus;
 
   SyncService._init();
 
   Future<bool> signInAndSync() async {
-    if (_isSyncing) return false;
+    if (_isSyncing) {
+      _lastError = "Sync already in progress (Status: $_syncStatus).";
+      return false;
+    }
     _isSyncing = true;
     _lastError = null;
+    _syncStatus = "Starting...";
     
     try {
       // 1. Silent anonymous login
       if (_auth.currentUser == null) {
+        _syncStatus = "Signing in anonymously...";
         debugPrint('SyncService: Signing in anonymously...');
-        await _auth.signInAnonymously();
+        await _auth.signInAnonymously().timeout(const Duration(seconds: 15), onTimeout: () {
+          throw Exception("Authentication timeout. Check your internet connection.");
+        });
         debugPrint('SyncService: Logged in as User ID: ${_auth.currentUser?.uid}');
       }
       
       // 2. Perform the two-way sync
-      await _syncData();
+      _syncStatus = "Syncing database...";
+      await _syncData().timeout(const Duration(seconds: 25), onTimeout: () {
+        throw Exception("Database sync timeout. Firestore connection took too long.");
+      });
+      
+      _syncStatus = "Idle";
       _isSyncing = false;
       return true;
     } catch (e) {
+      _syncStatus = "Error";
       _lastError = e.toString();
       debugPrint('SyncService: Error during sync: $e');
       _isSyncing = false;
@@ -47,6 +62,7 @@ class SyncService {
     // ----------------------------------------------------
     // 1. SYNC PROFILES
     // ----------------------------------------------------
+    _syncStatus = "Syncing profiles...";
     final localProfiles = await db.query('profiles');
     
     // Upload local profiles to Firestore
@@ -102,6 +118,7 @@ class SyncService {
     // ----------------------------------------------------
     // 2. SYNC WORKOUT TEMPLATES
     // ----------------------------------------------------
+    _syncStatus = "Syncing templates...";
     final localTemplates = await db.query('workout_templates');
     
     // Upload local templates to Firestore
@@ -152,6 +169,7 @@ class SyncService {
     // ----------------------------------------------------
     // 3. SYNC WORKOUTS & HEART RATE LOGS
     // ----------------------------------------------------
+    _syncStatus = "Syncing workouts...";
     final localWorkouts = await db.query('workouts');
     
     // Get all remote workout document IDs to avoid unnecessary document reads/writes

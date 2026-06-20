@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/database_helper.dart';
 import '../services/sync_service.dart';
@@ -21,7 +22,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _triggerSync() async {
     setState(() => _isSyncing = true);
+    
+    // Poll the sync status to update the UI
+    final timer = Timer.periodic(const Duration(milliseconds: 150), (_) {
+      if (mounted) setState(() {});
+    });
+
     final success = await SyncService.instance.signInAndSync();
+    timer.cancel();
+
     if (mounted) {
       setState(() => _isSyncing = false);
       String msg = success 
@@ -30,7 +39,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(msg),
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 5),
         ),
       );
       _loadProfile();
@@ -98,6 +107,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Widget _buildProfileSelector() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.person,
+            size: 20,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _availableProfiles.isEmpty
+                ? Text(
+                    _profileName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  )
+                : DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _profileName,
+                      isExpanded: true,
+                      isDense: true,
+                      dropdownColor: Theme.of(context).colorScheme.surface,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
+                      items: _availableProfiles.map((p) {
+                        return DropdownMenuItem(value: p, child: Text(p));
+                      }).toList(),
+                      onChanged: (val) async {
+                        if (val != null) {
+                          await DatabaseHelper.instance.setActiveProfileName(val);
+                          _loadProfile(val);
+                        }
+                      },
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -119,28 +182,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ListTile(
-              leading: const Icon(Icons.person, size: 40),
-              title: _availableProfiles.isEmpty 
-                  ? Text(_profileName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold))
-                  : DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _profileName,
-                        isExpanded: true,
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                        items: _availableProfiles.map((p) {
-                          return DropdownMenuItem(value: p, child: Text(p));
-                        }).toList(),
-                        onChanged: (val) async {
-                          if (val != null) {
-                            await DatabaseHelper.instance.setActiveProfileName(val);
-                            _loadProfile(val);
-                          }
-                        },
-                      ),
-                    ),
-              subtitle: const Text('Active Profile'),
-            ),
+            _buildProfileSelector(),
             const Divider(height: 32),
             const Text('Heart Rate Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 16),
@@ -148,13 +190,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Max Pre-Work HR (bpm)'),
-                Slider(
-                  value: _maxPreworkHr.toDouble(),
-                  min: 80,
-                  max: 180,
-                  divisions: 100,
-                  label: '$_maxPreworkHr',
-                  onChanged: (val) => setState(() => _maxPreworkHr = val.toInt()),
+                Expanded(
+                  child: Slider(
+                    value: _maxPreworkHr.toDouble(),
+                    min: 80,
+                    max: 180,
+                    divisions: 100,
+                    label: '$_maxPreworkHr',
+                    onChanged: (val) => setState(() => _maxPreworkHr = val.toInt()),
+                  ),
                 ),
                 Text('$_maxPreworkHr', style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
@@ -168,13 +212,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Absolute Max HR (bpm)'),
-                Slider(
-                  value: _maxHr.toDouble(),
-                  min: 140,
-                  max: 220,
-                  divisions: 80,
-                  label: '$_maxHr',
-                  onChanged: (val) => setState(() => _maxHr = val.toInt()),
+                Expanded(
+                  child: Slider(
+                    value: _maxHr.toDouble(),
+                    min: 140,
+                    max: 220,
+                    divisions: 80,
+                    label: '$_maxHr',
+                    onChanged: (val) => setState(() => _maxHr = val.toInt()),
+                  ),
                 ),
                 Text('$_maxHr', style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
@@ -186,13 +232,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Weight (kg)'),
-                Slider(
-                  value: _weightKg,
-                  min: 40,
-                  max: 150,
-                  divisions: 110,
-                  label: _weightKg.toStringAsFixed(1),
-                  onChanged: (val) => setState(() => _weightKg = val),
+                Expanded(
+                  child: Slider(
+                    value: _weightKg,
+                    min: 40,
+                    max: 150,
+                    divisions: 110,
+                    label: _weightKg.toStringAsFixed(1),
+                    onChanged: (val) => setState(() => _weightKg = val),
+                  ),
                 ),
                 Text(_weightKg.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
@@ -208,10 +256,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 16),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Sync with Firebase'),
+              title: const Text('Cloud Sync'),
               subtitle: Text(
                 _isSyncing 
-                    ? 'Synchronizing...' 
+                    ? 'Status: ${SyncService.instance.syncStatus}' 
                     : 'Profiles, templates, and history are synced to the cloud.',
                 style: const TextStyle(fontSize: 12),
               ),

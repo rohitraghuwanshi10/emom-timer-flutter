@@ -23,40 +23,40 @@ class EmomTimerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Nord Theme Colors
-    final Color nord0 = const Color(0xFF2E3440); // Polar Night (Background)
-    final Color nord1 = const Color(0xFF3B4252);
-    final Color nord4 = const Color(0xFFD8DEE9); // Snow Storm (Text)
-    final Color nord6 = const Color(0xFFECEFF4);
-    final Color nord8 = const Color(0xFF88C0D0); // Frost (Accent)
-    final Color nord11 = const Color(0xFFBF616A); // Aurora (Red/Stop)
-    final Color nord14 = const Color(0xFFA3BE8C); // Aurora (Green/Go)
+    // ChronoPulse Active Premium Neon Colors (inspired by custom app icon)
+    final Color deepBg = const Color(0xFF0C101B);      // Deep Slate Charcoal Blue
+    final Color deepSurface = const Color(0xFF171E2D); // Deep Slate Card Surface
+    final Color mintNeon = const Color(0xFF0DF2A3);    // Mint Neon Accent (Primary / Go)
+    final Color orangeNeon = const Color(0xFFFF7A00);  // Vibrant Orange Accent (Secondary / Rest)
+    final Color redNeon = const Color(0xFFFF3B30);     // Neon Red Accent (Stop/Error)
+    final Color textPrimary = const Color(0xFFECEFF4);  // White Text
+    final Color textSecondary = const Color(0xFF8E9AA8); // Slate Secondary Text
 
     return MaterialApp(
       title: 'ChronoPulse Active',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: nord0,
-        primaryColor: nord8,
+        scaffoldBackgroundColor: deepBg,
+        primaryColor: mintNeon,
         colorScheme: ColorScheme.dark(
-          primary: nord8,
-          secondary: nord14,
-          surface: nord1,
-          error: nord11,
-          onPrimary: nord0,
-          onSecondary: nord0,
-          onSurface: nord4,
-          onError: nord6,
+          primary: mintNeon,
+          secondary: orangeNeon,
+          surface: deepSurface,
+          error: redNeon,
+          onPrimary: deepBg,
+          onSecondary: deepBg,
+          onSurface: textPrimary,
+          onError: textPrimary,
         ),
         appBarTheme: AppBarTheme(
-          backgroundColor: nord1,
+          backgroundColor: deepSurface,
           elevation: 0,
-          titleTextStyle: TextStyle(color: nord6, fontSize: 20, fontWeight: FontWeight.bold),
+          titleTextStyle: TextStyle(color: textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
         ),
         bottomNavigationBarTheme: BottomNavigationBarThemeData(
-          backgroundColor: nord1,
-          selectedItemColor: nord8,
-          unselectedItemColor: nord4.withValues(alpha: 0.6),
+          backgroundColor: deepSurface,
+          selectedItemColor: mintNeon,
+          unselectedItemColor: textSecondary.withValues(alpha: 0.6),
         ),
       ),
       home: const MainNavigationScreen(),
