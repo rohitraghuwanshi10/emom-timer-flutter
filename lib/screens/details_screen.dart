@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/database_helper.dart';
+import '../services/sync_service.dart';
 
 class DetailsScreen extends StatefulWidget {
   final String dateStr;
@@ -162,6 +163,54 @@ class _DetailsScreenState extends State<DetailsScreen> {
     return hr > 0 ? '$hr' : '--';
   }
 
+  Future<void> _editWorkoutNotes(Map<String, dynamic> w) async {
+    final controller = TextEditingController(text: w['notes'] as String? ?? '');
+    final bool? saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Workout Notes'),
+        content: TextField(
+          controller: controller,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Notes',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                final db = await DatabaseHelper.instance.database;
+                await db.update(
+                  'workouts',
+                  {'notes': controller.text},
+                  where: 'id = ?',
+                  whereArgs: [w['id']],
+                );
+                if (context.mounted) Navigator.pop(context, true);
+              } catch (e) {
+                debugPrint('Error updating notes: $e');
+                if (context.mounted) Navigator.pop(context, false);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      await _loadData();
+      // Trigger background sync to upload the update
+      SyncService.instance.signInAndSync();
+    }
+  }
+
   Widget _buildDataTable() {
     if (_workouts.isEmpty) return const Text('No workouts recorded.');
 
@@ -204,7 +253,26 @@ class _DetailsScreenState extends State<DetailsScreen> {
             DataCell(Text(_fmtHr(w['max_hr']), style: const TextStyle(color: Color(0xFFFF3B30)))), // Neon Red
             DataCell(Text(_fmtHr(w['avg_hr']), style: const TextStyle(color: Color(0xFF38B6FF)))), // Cyan/Blue
             DataCell(Text((w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--', style: const TextStyle(color: Color(0xFFBF5AF2)))), // Neon Purple
-            DataCell(Text(w['notes'] as String? ?? '', style: const TextStyle(color: Colors.grey))),
+            DataCell(
+              InkWell(
+                onTap: () => _editWorkoutNotes(w),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      child: Text(
+                        w['notes'] as String? ?? '',
+                        style: const TextStyle(color: Colors.grey),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.edit, size: 14, color: Colors.grey),
+                  ],
+                ),
+              ),
+            ),
           ]);
         }).toList(),
       ),

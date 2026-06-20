@@ -7,6 +7,7 @@ import '../services/audio_service.dart';
 import '../services/database_helper.dart';
 import '../services/sync_service.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class TimerScreen extends StatefulWidget {
   const TimerScreen({super.key});
@@ -84,6 +85,13 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
             _birthDate = profile['birth_date'] as String?;
             _sex = profile['sex'] as String?;
             _weightKg = profile['weight_kg'] as double? ?? 70.0;
+            
+            // Auto-check if Bluetooth is connected and maxPreworkHr is configured
+            if (_isBluetoothConnected) {
+              _autoRegulationEnabled = _maxPreworkHr > 0;
+            } else {
+              _autoRegulationEnabled = false;
+            }
           });
           
           final autoConnect = profile['auto_connect_hr'] as int? ?? 1;
@@ -105,13 +113,22 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
   void _setupBluetooth() {
     _btStateSubscription = AppBluetoothService.instance.deviceStateStream.listen((state) {
-      setState(() {
-        _isBluetoothConnected = state == BluetoothConnectionState.connected;
-      });
+      if (mounted) {
+        setState(() {
+          _isBluetoothConnected = state == BluetoothConnectionState.connected;
+          if (_isBluetoothConnected) {
+            _autoRegulationEnabled = _maxPreworkHr > 0;
+          } else {
+            _autoRegulationEnabled = false;
+          }
+        });
+      }
     });
 
     _hrSubscription = AppBluetoothService.instance.heartRateStream.listen((hr) {
-      setState(() => _currentHr = hr);
+      if (mounted) {
+        setState(() => _currentHr = hr);
+      }
       _engine?.updateHeartRate(hr);
     });
   }
@@ -119,6 +136,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   void _startWorkout() {
     if (_engine != null && _currentEvent.state != WorkoutState.IDLE && _currentEvent.state != WorkoutState.FINISHED) return;
 
+    WakelockPlus.enable(); // Keep screen awake during active workout
     _engine?.dispose(); // clean up any old engine
     _workoutSubscription?.cancel();
 
@@ -202,6 +220,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   }
 
   void _resetToIdle() {
+    WakelockPlus.disable(); // Allow screen to sleep after workout is done
     _engine?.dispose();
     _engine = null;
     setState(() {
@@ -217,6 +236,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
   @override
   void dispose() {
+    WakelockPlus.disable(); // Ensure screen wake lock is released on page dispose
     _notesController.dispose();
     _progressController.dispose();
     _workoutSubscription?.cancel();
@@ -283,6 +303,90 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     if (pct < 80) return 'ZONE 3';
     if (pct < 90) return 'ZONE 4';
     return 'ZONE 5';
+  }
+
+  Color _getZoneColor(String zone) {
+    switch (zone) {
+      case 'WARM UP': return Colors.grey;
+      case 'ZONE 1': return Colors.blue;
+      case 'ZONE 2': return Colors.green;
+      case 'ZONE 3': return Colors.yellow;
+      case 'ZONE 4': return Colors.orange;
+      case 'ZONE 5': return Colors.red;
+      default: return Colors.grey;
+    }
+  }
+
+  Widget _buildLiveHeartRateDisplay() {
+    final bool isConnected = _currentHr > 0;
+    final zone = isConnected ? _calculateZone(_currentHr) : '';
+    final zoneColor = isConnected ? _getZoneColor(zone) : Colors.grey;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            PulsingHeart(isActive: isConnected),
+            const SizedBox(width: 8),
+            Text(
+              isConnected ? '$_currentHr' : '--',
+              style: TextStyle(
+                fontSize: 64,
+                fontWeight: FontWeight.w900,
+                color: isConnected ? Colors.white : Colors.grey.withValues(alpha: 0.3),
+                letterSpacing: -2,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'BPM',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isConnected ? Colors.grey : Colors.grey.withValues(alpha: 0.3),
+              ),
+            ),
+          ],
+        ),
+        if (isConnected && zone.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: zoneColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: zoneColor.withValues(alpha: 0.5),
+                width: 1,
+              ),
+            ),
+            child: Text(
+              zone,
+              style: TextStyle(
+                color: zoneColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 4),
+          Text(
+            'NO HR MONITOR CONNECTED',
+            style: TextStyle(
+              color: Colors.grey.withValues(alpha: 0.4),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   Future<void> _saveWorkoutToDb({int? completedRoundsOverride}) async {
@@ -379,6 +483,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     'rounds': _totalRounds,
                     'work_time': _workDuration,
                     'rest_time': _restDuration,
+                    'notes': _notesController.text,
                   }, conflictAlgorithm: ConflictAlgorithm.replace);
                   if (context.mounted) {
                     Navigator.pop(context);
@@ -429,6 +534,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     _totalRounds = t['rounds'] as int;
                     _workDuration = t['work_time'] as int;
                     _restDuration = t['rest_time'] as int;
+                    _notesController.text = t['notes'] as String? ?? '';
                   });
                   if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
                   Navigator.pop(context);
@@ -531,7 +637,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               title: const Text('Auto Regulate Rest'),
               subtitle: Text('Hold rest until HR < $_maxPreworkHr'),
               value: _autoRegulationEnabled,
-              onChanged: (val) => setState(() => _autoRegulationEnabled = val),
+              onChanged: _isBluetoothConnected
+                  ? (val) => setState(() => _autoRegulationEnabled = val)
+                  : null,
             ),
             SwitchListTile(
               title: const Text('Save History'),
@@ -770,7 +878,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               _buildProfileSelector(isIdle),
               const SizedBox(height: 16),
               _buildTimerDisplay(),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              _buildLiveHeartRateDisplay(),
+              const SizedBox(height: 24),
               if (isIdle) _buildConfigPanel(),
             ],
           ),
@@ -806,6 +916,64 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                 ),
               ],
             ),
+    );
+  }
+}
+
+class PulsingHeart extends StatefulWidget {
+  final bool isActive;
+  const PulsingHeart({super.key, required this.isActive});
+
+  @override
+  State<PulsingHeart> createState() => _PulsingHeartState();
+}
+
+class _PulsingHeartState extends State<PulsingHeart> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _animation = Tween<double>(begin: 0.9, end: 1.1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    if (widget.isActive) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant PulsingHeart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive) {
+      if (widget.isActive) {
+        _controller.repeat(reverse: true);
+      } else {
+        _controller.stop();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScaleTransition(
+      scale: widget.isActive ? _animation : const AlwaysStoppedAnimation(1.0),
+      child: Icon(
+        Icons.favorite,
+        color: widget.isActive ? Colors.redAccent : Colors.grey.withValues(alpha: 0.3),
+        size: 36,
+      ),
     );
   }
 }

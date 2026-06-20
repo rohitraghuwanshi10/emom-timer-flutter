@@ -25,6 +25,7 @@ class WorkoutEngine {
   final int totalRounds;
   final int workDuration;
   final int baseRestDuration;
+  final int prepDuration;
   
   // Auto-regulation settings
   final bool autoRegulationEnabled;
@@ -36,6 +37,7 @@ class WorkoutEngine {
   int _currentRound = 1;
   int _timeRemaining = 0;
   bool _isWaitingForHr = false;
+  int _currentHr = 0;
   
   // Elapsed metrics
   int totalTimeSec = 0;
@@ -52,13 +54,14 @@ class WorkoutEngine {
     required this.baseRestDuration,
     this.autoRegulationEnabled = false,
     this.maxPreworkHr,
+    this.prepDuration = 10,
   });
 
   void start() {
     if (_state != WorkoutState.IDLE) return;
     
     _state = WorkoutState.PREP;
-    _timeRemaining = 10; // 10 seconds prep
+    _timeRemaining = prepDuration;
     _broadcast();
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -89,7 +92,7 @@ class WorkoutEngine {
     _broadcast();
   }
 
-  void _tick({int? currentHr}) {
+  void _tick() {
     if (_state == WorkoutState.FINISHED || _state == WorkoutState.PAUSED) return;
 
     totalTimeSec++;
@@ -101,8 +104,8 @@ class WorkoutEngine {
       
       // Auto-regulation: check near end of rest
       if (_state == WorkoutState.REST && _timeRemaining == 1) {
-        if (autoRegulationEnabled && maxPreworkHr != null && currentHr != null) {
-          if (currentHr > maxPreworkHr!) {
+        if (autoRegulationEnabled && maxPreworkHr != null && _currentHr > 0) {
+          if (_currentHr > maxPreworkHr!) {
             _isWaitingForHr = true;
             // Hold the timer at 1 second until HR drops
             _timeRemaining = 2; // will decrement back to 1 next tick
@@ -172,6 +175,7 @@ class WorkoutEngine {
   
   // Used by the Bluetooth service to feed HR directly into the engine's tick loop
   void updateHeartRate(int hr) {
+    _currentHr = hr;
     if (_isWaitingForHr && hr <= (maxPreworkHr ?? 999)) {
       _isWaitingForHr = false;
       _timeRemaining = 1; // allows it to transition immediately next tick

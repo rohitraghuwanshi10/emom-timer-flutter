@@ -166,17 +166,19 @@ class SyncService {
       }
     }
 
-    // ----------------------------------------------------
     // 3. SYNC WORKOUTS & HEART RATE LOGS
     // ----------------------------------------------------
     _syncStatus = "Syncing workouts...";
     final localWorkouts = await db.query('workouts');
     
-    // Get all remote workout document IDs to avoid unnecessary document reads/writes
+    // Get all remote workout document data to check for updates (e.g. edited notes)
     final remoteWorkoutsSnap = await _firestore.collection('workouts').get();
-    final Set<String> remoteDocIds = remoteWorkoutsSnap.docs.map((doc) => doc.id).toSet();
+    final Map<String, Map<String, dynamic>> remoteWorkoutsMap = {
+      for (var doc in remoteWorkoutsSnap.docs) doc.id: doc.data()
+    };
+    final Set<String> remoteDocIds = remoteWorkoutsMap.keys.toSet();
     
-    // Upload local workouts that are missing in Firestore
+    // Upload local workouts that are missing in Firestore or have updated notes
     for (var w in localWorkouts) {
       final pName = w['profile_name'] as String;
       final sTime = w['start_time'] as String;
@@ -215,20 +217,45 @@ class SyncService {
           'hr_details': hrDataList,
         });
         
-        // Add to our list so we track it as synced
+        // Add to our list and map so we track it as synced
         remoteDocIds.add(docId);
+        remoteWorkoutsMap[docId] = {
+          'profile_name': pName,
+          'start_time': sTime,
+          'notes': w['notes'],
+        };
+      } else {
+        final remoteData = remoteWorkoutsMap[docId];
+        if (remoteData != null) {
+          final remoteNotes = remoteData['notes'] as String? ?? '';
+          final localNotes = w['notes'] as String? ?? '';
+          if (localNotes != remoteNotes && localNotes.isNotEmpty) {
+            debugPrint('SyncService: Updating remote workout notes for: $docId...');
+            await _firestore.collection('workouts').doc(docId).update({
+              'notes': localNotes,
+            });
+            remoteData['notes'] = localNotes;
+          }
+        }
       }
     }
 
-    // Download remote workouts that are missing locally
+    // Download remote workouts that are missing locally or have updated notes
     for (var doc in remoteWorkoutsSnap.docs) {
       final docId = doc.id;
       final data = doc.data();
       final pName = data['profile_name'] as String;
       final sTime = data['start_time'] as String;
       
-      final exists = localWorkouts.any((w) => w['profile_name'] == pName && w['start_time'] == sTime);
-      if (!exists) {
+      Map<String, dynamic>? localW;
+      for (var w in localWorkouts) {
+        if (w['profile_name'] == pName && w['start_time'] == sTime) {
+          localW = w;
+          break;
+        }
+      }
+      
+      if (localW == null) {
         debugPrint('SyncService: Downloading workout: $docId...');
         await db.transaction((txn) async {
           final workoutId = await txn.insert('workouts', {
@@ -257,6 +284,18 @@ class SyncService {
             });
           }
         });
+      } else {
+        final localNotes = localW['notes'] as String? ?? '';
+        final remoteNotes = data['notes'] as String? ?? '';
+        if (localNotes != remoteNotes && localNotes.isEmpty && remoteNotes.isNotEmpty) {
+          debugPrint('SyncService: Downloading updated notes for $docId...');
+          await db.update(
+            'workouts',
+            {'notes': remoteNotes},
+            where: 'id = ?',
+            whereArgs: [localW['id']],
+          );
+        }
       }
     }
 
