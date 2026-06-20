@@ -99,7 +99,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 3,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -113,6 +113,14 @@ class DatabaseHelper {
           }
         },
         onCreate: _createDB,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute('ALTER TABLE workout_templates ADD COLUMN continuous_mode INTEGER DEFAULT 0');
+          }
+          if (oldVersion < 3) {
+            await db.execute('ALTER TABLE workouts ADD COLUMN workout_name TEXT');
+          }
+        },
       ),
     );
   }
@@ -141,6 +149,7 @@ class DatabaseHelper {
           work_time INTEGER,
           rest_time INTEGER,
           notes TEXT,
+          continuous_mode INTEGER DEFAULT 0,
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE,
           UNIQUE(profile_name, template_name)
       )
@@ -150,6 +159,7 @@ class DatabaseHelper {
       CREATE TABLE IF NOT EXISTS workouts (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           profile_name TEXT,
+          workout_name TEXT,
           start_time TEXT NOT NULL,
           end_time TEXT,
           total_rounds_completed INTEGER,
@@ -211,6 +221,7 @@ class DatabaseHelper {
 
   Future<int?> saveWorkout({
     required String profileName,
+    String? workoutName,
     required String startTime,
     required String endTime,
     required int totalRoundsCompleted,
@@ -230,6 +241,7 @@ class DatabaseHelper {
       return await db.transaction((txn) async {
         final workoutId = await txn.insert('workouts', {
           'profile_name': profileName,
+          'workout_name': workoutName,
           'start_time': startTime,
           'end_time': endTime,
           'total_rounds_completed': totalRoundsCompleted,

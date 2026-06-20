@@ -151,7 +151,9 @@ class HistoryScreenState extends State<HistoryScreen> {
                       final day = _days[index];
                       
                       final int totalSec = (day['total_time'] as num?)?.toInt() ?? 0;
-                      final String timeStr = '${totalSec ~/ 60}m ${totalSec % 60}s';
+                      final String timeStr = totalSec >= 3600
+                          ? '${totalSec ~/ 3600}h ${((totalSec % 3600) ~/ 60).toString().padLeft(2, '0')}m'
+                          : '${totalSec ~/ 60}m ${totalSec % 60}s';
                       final dateStr = day['date_str'] as String;
                       
                       return Card(

@@ -111,4 +111,48 @@ void main() {
       expect(waitingEvents, isEmpty);
     });
   });
+
+  group('WorkoutEngine Continuous Mode Tests', () {
+    test('Continuous workout mode keeps running past the total rounds limit', () async {
+      final engine = WorkoutEngine(
+        totalRounds: 2,
+        workDuration: 1,
+        baseRestDuration: 1,
+        prepDuration: 1,
+        continuousMode: true,
+      );
+
+      final events = <WorkoutEvent>[];
+      final subscription = engine.workoutStream.listen((event) {
+        events.add(event);
+      });
+
+      engine.start();
+
+      // Tick 1: PREP (remaining 1) -> transitions to WORK (remaining 1)
+      // Tick 2: WORK (remaining 1) -> transitions to REST (remaining 1)
+      // Tick 3: REST (remaining 1) -> transitions to WORK round 2 (remaining 1)
+      // Tick 4: WORK round 2 (remaining 1) -> transitions to REST round 2 (remaining 1)
+      // Tick 5: REST round 2 (remaining 1) -> transitions to WORK round 3 (remaining 1) instead of FINISHED!
+      await Future.delayed(const Duration(milliseconds: 5500));
+      
+      // Stop it manually
+      engine.stop();
+      
+      await Future.delayed(const Duration(milliseconds: 500));
+      engine.dispose();
+      await subscription.cancel();
+
+      // Verify that states were transitioned through properly and exceeded round limit
+      final states = events.map((e) => e.state).toList();
+      final rounds = events.map((e) => e.currentRound).toList();
+      
+      expect(states, contains(WorkoutState.PREP));
+      expect(states, contains(WorkoutState.WORK));
+      expect(states, contains(WorkoutState.REST));
+      
+      expect(rounds, contains(3));
+      expect(states.last, equals(WorkoutState.FINISHED));
+    });
+  });
 }

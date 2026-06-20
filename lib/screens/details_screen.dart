@@ -125,7 +125,14 @@ class _DetailsScreenState extends State<DetailsScreen> {
           notes = '"${notes.replaceAll('"', '""')}"';
         }
 
-        csvBuffer.writeln('WO ${i + 1},$startStr,$rounds,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$notes');
+        final String name = (w['workout_name'] as String? ?? '').isNotEmpty
+            ? w['workout_name'] as String
+            : 'WO ${i + 1}';
+        String escapedName = name;
+        if (escapedName.contains(',') || escapedName.contains('"') || escapedName.contains('\n') || escapedName.contains('\r')) {
+          escapedName = '"${escapedName.replaceAll('"', '""')}"';
+        }
+        csvBuffer.writeln('$escapedName,$startStr,$rounds,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$notes');
       }
 
       // Write to file
@@ -243,8 +250,11 @@ class _DetailsScreenState extends State<DetailsScreen> {
             startStr = "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
           } catch (_) {}
 
-          return DataRow(cells: [
-            DataCell(Text('WO ${idx + 1}', style: TextStyle(color: wColor, fontWeight: FontWeight.bold))),
+            final String name = (w['workout_name'] as String? ?? '').isNotEmpty
+                ? w['workout_name'] as String
+                : 'WO ${idx + 1}';
+            return DataRow(cells: [
+              DataCell(Text(name, style: TextStyle(color: wColor, fontWeight: FontWeight.bold))),
             DataCell(Text(startStr)),
             DataCell(Text("${w['total_rounds_completed'] ?? 0}")),
             DataCell(Text(_fmtSec(w['total_time_sec']))),

@@ -1,0 +1,198 @@
+import 'dart:io';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:path/path.dart' as p;
+
+void main() {
+  // Initialize FFI for tests
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+
+  group('Database Schema and Migration Tests', () {
+    late String dbPath;
+
+    Future<void> deleteDbFile() async {
+      try {
+        final file = File(dbPath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    }
+
+    setUp(() async {
+      final dbDir = await databaseFactory.getDatabasesPath();
+      dbPath = p.join(dbDir, 'test_db_migration.db');
+      await deleteDbFile();
+    });
+
+    tearDown(() async {
+      await deleteDbFile();
+    });
+
+    test('Create DB version 3 contains workout_name column', () async {
+      final db = await openDatabase(
+        dbPath,
+        version: 3,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                max_hr INTEGER,
+                max_prework_hr INTEGER,
+                sex TEXT,
+                birth_date TEXT,
+                weight_kg REAL,
+                weight_unit_pref TEXT,
+                auto_connect_hr INTEGER
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workout_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_name TEXT,
+                template_name TEXT,
+                rounds INTEGER,
+                work_time INTEGER,
+                rest_time INTEGER,
+                notes TEXT,
+                continuous_mode INTEGER DEFAULT 0,
+                FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE,
+                UNIQUE(profile_name, template_name)
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_name TEXT,
+                workout_name TEXT,
+                start_time TEXT NOT NULL,
+                end_time TEXT,
+                total_rounds_completed INTEGER,
+                work_duration INTEGER,
+                rest_duration INTEGER,
+                total_time_sec INTEGER,
+                work_time_sec INTEGER,
+                rest_time_sec INTEGER,
+                max_hr INTEGER,
+                avg_hr INTEGER,
+                calories_burnt_kcal REAL,
+                notes TEXT,
+                details_file_legacy TEXT,
+                FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE
+            )
+          ''');
+        },
+      );
+
+      // Insert a mock profile and workout record with a custom name
+      await db.insert('profiles', {
+        'name': 'Default',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      await db.insert('workouts', {
+        'profile_name': 'Default',
+        'workout_name': 'ABC - Double 18KG',
+        'start_time': '2026-06-20T12:00:00',
+        'total_rounds_completed': 10,
+        'work_duration': 60,
+        'rest_duration': 30,
+        'total_time_sec': 900,
+        'work_time_sec': 600,
+        'rest_time_sec': 300,
+        'max_hr': 150,
+        'avg_hr': 130,
+        'calories_burnt_kcal': 120.5,
+        'notes': 'Test notes',
+      });
+
+      // Query the workout and verify workout_name
+      final res = await db.query('workouts');
+      expect(res.length, equals(1));
+      expect(res.first['workout_name'], equals('ABC - Double 18KG'));
+
+      await db.close();
+    });
+
+    test('Migration from version 2 to 3 adds workout_name column successfully', () async {
+      // 1. Create a version 2 database schema (no workout_name column in workouts)
+      final db = await openDatabase(
+        dbPath,
+        version: 2,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_name TEXT,
+                start_time TEXT NOT NULL,
+                end_time TEXT,
+                total_rounds_completed INTEGER,
+                work_duration INTEGER,
+                rest_duration INTEGER,
+                total_time_sec INTEGER,
+                work_time_sec INTEGER,
+                rest_time_sec INTEGER,
+                max_hr INTEGER,
+                avg_hr INTEGER,
+                calories_burnt_kcal REAL,
+                notes TEXT,
+                details_file_legacy TEXT,
+                FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE
+            )
+          ''');
+        },
+      );
+
+      // Insert a profile and workout under version 2 schema
+      await db.insert('profiles', {
+        'name': 'Default',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      await db.insert('workouts', {
+        'profile_name': 'Default',
+        'start_time': '2026-06-20T12:00:00',
+        'total_rounds_completed': 5,
+        'work_duration': 60,
+        'rest_duration': 30,
+      });
+
+      await db.close();
+
+      // 2. Open it again with version 3 triggering the migration
+      final dbV3 = await openDatabase(
+        dbPath,
+        version: 3,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 3) {
+            await db.execute('ALTER TABLE workouts ADD COLUMN workout_name TEXT');
+          }
+        },
+      );
+
+      // Verify that we can query and update the workout_name column on the migrated database
+      await dbV3.update(
+        'workouts',
+        {'workout_name': 'ABC - Double 18KG'},
+        where: 'id = ?',
+        whereArgs: [1],
+      );
+
+      final res = await dbV3.query('workouts');
+      expect(res.first['workout_name'], equals('ABC - Double 18KG'));
+
+      await dbV3.close();
+    });
+  });
+}

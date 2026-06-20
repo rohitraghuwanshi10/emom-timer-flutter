@@ -44,7 +44,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   );
 
   bool _saveHistoryEnabled = true;
+  bool _continuousMode = false;
   final TextEditingController _notesController = TextEditingController();
+  String? _loadedTemplateName;
   
   // Cache variables for calorie/zone calculations
   int _maxHr = 180;
@@ -149,6 +151,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       baseRestDuration: _restDuration,
       autoRegulationEnabled: _autoRegulationEnabled,
       maxPreworkHr: _maxPreworkHr,
+      continuousMode: _continuousMode,
     );
 
     _workoutSubscription = _engine!.workoutStream.listen((event) {
@@ -431,6 +434,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       
       final workoutId = await DatabaseHelper.instance.saveWorkout(
         profileName: _profileName,
+        workoutName: _loadedTemplateName,
         startTime: _workoutStartTime!.toIso8601String().substring(0, 19),
         endTime: endTime.toIso8601String().substring(0, 19),
         totalRoundsCompleted: completedRounds,
@@ -460,6 +464,22 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     }
   }
 
+  void _showHelpDialog(String title, String description) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(description),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showSaveTemplateDialog() async {
     final controller = TextEditingController();
     showDialog(
@@ -484,6 +504,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     'work_time': _workDuration,
                     'rest_time': _restDuration,
                     'notes': _notesController.text,
+                    'continuous_mode': _continuousMode ? 1 : 0,
                   }, conflictAlgorithm: ConflictAlgorithm.replace);
                   if (context.mounted) {
                     Navigator.pop(context);
@@ -535,6 +556,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     _workDuration = t['work_time'] as int;
                     _restDuration = t['rest_time'] as int;
                     _notesController.text = t['notes'] as String? ?? '';
+                    _continuousMode = (t['continuous_mode'] as int? ?? 0) == 1;
+                    _loadedTemplateName = t['template_name'] as String?;
                   });
                   if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
                   Navigator.pop(context);
@@ -581,11 +604,14 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                   child: Slider(
                     value: _workDuration.toDouble(),
                     min: 10,
-                    max: 300,
-                    divisions: 29,
+                    max: 3600,
+                    divisions: 359,
                     label: '$_workDuration s',
                     onChanged: (val) {
-                      setState(() => _workDuration = val.toInt());
+                      setState(() {
+                        _workDuration = val.toInt();
+                        _loadedTemplateName = null;
+                      });
                       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
                     },
                   ),
@@ -605,7 +631,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     divisions: 24,
                     label: '$_restDuration s',
                     onChanged: (val) {
-                      setState(() => _restDuration = val.toInt());
+                      setState(() {
+                        _restDuration = val.toInt();
+                        _loadedTemplateName = null;
+                      });
                       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
                     },
                   ),
@@ -625,7 +654,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     divisions: 49,
                     label: '$_totalRounds',
                     onChanged: (val) {
-                      setState(() => _totalRounds = val.toInt());
+                      setState(() {
+                        _totalRounds = val.toInt();
+                        _loadedTemplateName = null;
+                      });
                       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
                     },
                   ),
@@ -634,16 +666,82 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               ],
             ),
             SwitchListTile(
-              title: const Text('Auto Regulate Rest'),
-              subtitle: Text('Hold rest until HR < $_maxPreworkHr'),
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Auto Regulate Rest'),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _showHelpDialog(
+                      'Auto Regulate Rest',
+                      'Hold the rest phase countdown until your heart rate drops below your profile\'s configured threshold (currently $_maxPreworkHr BPM). Requires a connected heart rate monitor.',
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(
+                        Icons.help_outline,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               value: _autoRegulationEnabled,
               onChanged: _isBluetoothConnected
                   ? (val) => setState(() => _autoRegulationEnabled = val)
                   : null,
             ),
             SwitchListTile(
-              title: const Text('Save History'),
-              subtitle: const Text('Record workout and heart rate logs to database'),
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Continuous Workout'),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _showHelpDialog(
+                      'Continuous Workout',
+                      'Workout runs indefinitely, incrementing rounds continuously until you manually tap the Stop/End button.',
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(
+                        Icons.help_outline,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              value: _continuousMode,
+              onChanged: (val) => setState(() => _continuousMode = val),
+            ),
+            SwitchListTile(
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Save History'),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _showHelpDialog(
+                      'Save History',
+                      'Record this workout summary and second-by-second heart rate logs to the local database and synchronize with the cloud.',
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(
+                        Icons.help_outline,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               value: _saveHistoryEnabled,
               onChanged: (val) => setState(() => _saveHistoryEnabled = val),
             ),
@@ -836,6 +934,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   @override
   Widget build(BuildContext context) {
     bool isIdle = _currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED;
+    final bool isNarrow = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       appBar: AppBar(
@@ -888,32 +987,56 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: isIdle
-          ? FloatingActionButton.extended(
-              onPressed: _startWorkout,
-              backgroundColor: Theme.of(context).colorScheme.secondary,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('START WORKOUT'),
-            )
+          ? (isNarrow
+              ? FloatingActionButton(
+                  heroTag: 'start_btn',
+                  onPressed: _startWorkout,
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  child: const Icon(Icons.play_arrow),
+                )
+              : FloatingActionButton.extended(
+                  heroTag: 'start_btn',
+                  onPressed: _startWorkout,
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Start'),
+                ))
           : Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                FloatingActionButton.extended(
-                  heroTag: 'pause_btn',
-                  onPressed: () => _engine?.pause(),
-                  backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
-                      ? Theme.of(context).colorScheme.secondary 
-                      : Colors.orange,
-                  icon: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
-                  label: Text(_currentEvent.state == WorkoutState.PAUSED ? 'RESUME' : 'PAUSE'),
-                ),
+                isNarrow
+                    ? FloatingActionButton(
+                        heroTag: 'pause_btn',
+                        onPressed: () => _engine?.pause(),
+                        backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
+                            ? Theme.of(context).colorScheme.secondary 
+                            : Colors.orange,
+                        child: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
+                      )
+                    : FloatingActionButton.extended(
+                        heroTag: 'pause_btn',
+                        onPressed: () => _engine?.pause(),
+                        backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
+                            ? Theme.of(context).colorScheme.secondary 
+                            : Colors.orange,
+                        icon: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
+                        label: Text(_currentEvent.state == WorkoutState.PAUSED ? 'Resume' : 'Pause'),
+                      ),
                 const SizedBox(width: 16),
-                FloatingActionButton.extended(
-                  heroTag: 'stop_btn',
-                  onPressed: _stopWorkout,
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                  icon: const Icon(Icons.stop),
-                  label: const Text('END WORKOUT'),
-                ),
+                isNarrow
+                    ? FloatingActionButton(
+                        heroTag: 'stop_btn',
+                        onPressed: _stopWorkout,
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                        child: const Icon(Icons.stop),
+                      )
+                    : FloatingActionButton.extended(
+                        heroTag: 'stop_btn',
+                        onPressed: _stopWorkout,
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                        icon: const Icon(Icons.stop),
+                        label: const Text('End'),
+                      ),
               ],
             ),
     );

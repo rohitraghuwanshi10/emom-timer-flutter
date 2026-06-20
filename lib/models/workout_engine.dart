@@ -26,6 +26,7 @@ class WorkoutEngine {
   final int workDuration;
   final int baseRestDuration;
   final int prepDuration;
+  final bool continuousMode;
   
   // Auto-regulation settings
   final bool autoRegulationEnabled;
@@ -55,6 +56,7 @@ class WorkoutEngine {
     this.autoRegulationEnabled = false,
     this.maxPreworkHr,
     this.prepDuration = 10,
+    this.continuousMode = false,
   });
 
   void start() {
@@ -131,7 +133,7 @@ class WorkoutEngine {
         break;
       case WorkoutState.WORK:
         if (baseRestDuration <= 0) {
-          if (_currentRound >= totalRounds) {
+          if (!continuousMode && _currentRound >= totalRounds) {
             _state = WorkoutState.FINISHED;
             _timeRemaining = 0;
             _timer?.cancel();
@@ -146,7 +148,7 @@ class WorkoutEngine {
         }
         break;
       case WorkoutState.REST:
-        if (_currentRound >= totalRounds) {
+        if (!continuousMode && _currentRound >= totalRounds) {
           _state = WorkoutState.FINISHED;
           _timeRemaining = 0;
           _timer?.cancel();

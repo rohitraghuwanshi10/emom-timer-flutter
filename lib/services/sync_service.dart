@@ -134,6 +134,7 @@ class SyncService {
         'work_time': local['work_time'],
         'rest_time': local['rest_time'],
         'notes': local['notes'],
+        'continuous_mode': local['continuous_mode'] ?? 0,
       }, SetOptions(merge: true));
     }
 
@@ -153,6 +154,7 @@ class SyncService {
           'work_time': data['work_time'],
           'rest_time': data['rest_time'],
           'notes': data['notes'],
+          'continuous_mode': data['continuous_mode'] ?? 0,
         });
         debugPrint('SyncService: Downloaded template $tName for profile $pName');
       } else {
@@ -162,6 +164,7 @@ class SyncService {
           'work_time': data['work_time'],
           'rest_time': data['rest_time'],
           'notes': data['notes'],
+          'continuous_mode': data['continuous_mode'] ?? 0,
         }, where: 'profile_name = ? AND template_name = ?', whereArgs: [pName, tName]);
       }
     }
@@ -202,6 +205,7 @@ class SyncService {
 
         await _firestore.collection('workouts').doc(docId).set({
           'profile_name': pName,
+          'workout_name': w['workout_name'] ?? '',
           'start_time': sTime,
           'end_time': w['end_time'],
           'total_rounds_completed': w['total_rounds_completed'],
@@ -260,6 +264,7 @@ class SyncService {
         await db.transaction((txn) async {
           final workoutId = await txn.insert('workouts', {
             'profile_name': pName,
+            'workout_name': data['workout_name'] ?? '',
             'start_time': sTime,
             'end_time': data['end_time'],
             'total_rounds_completed': data['total_rounds_completed'],
