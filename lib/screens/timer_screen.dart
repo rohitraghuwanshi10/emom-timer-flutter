@@ -6,6 +6,7 @@ import '../services/bluetooth_service.dart';
 import '../services/audio_service.dart';
 import '../services/database_helper.dart';
 import '../services/sync_service.dart';
+import '../services/health_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -53,6 +54,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   String? _birthDate;
   String? _sex;
   double _weightKg = 70.0;
+  bool _healthEnabled = false;
 
   // Session data
   List<Map<String, dynamic>> _hrDetails = [];
@@ -87,6 +89,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
             _birthDate = profile['birth_date'] as String?;
             _sex = profile['sex'] as String?;
             _weightKg = profile['weight_kg'] as double? ?? 70.0;
+            _healthEnabled = (profile['health_enabled'] as int? ?? 0) == 1;
             
             // Auto-check if Bluetooth is connected and maxPreworkHr is configured
             if (_isBluetoothConnected) {
@@ -449,6 +452,16 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         notes: notes,
         hrLogs: _hrDetails,
       );
+      
+      if (_healthEnabled) {
+        HealthService.instance.saveWorkout(
+          start: _workoutStartTime!,
+          end: endTime,
+          totalCalories: caloriesBurnt.round(),
+          title: _loadedTemplateName ?? 'EMOM Workout',
+          heartRateData: _hrDetails,
+        );
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

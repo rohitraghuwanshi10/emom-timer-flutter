@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/database_helper.dart';
 import '../services/sync_service.dart';
+import '../services/health_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -19,6 +20,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _maxHr = 180;
   double _weightKg = 70.0;
   bool _autoConnectHr = true;
+  bool _healthEnabled = false;
 
   Future<void> _triggerSync() async {
     setState(() => _isSyncing = true);
@@ -74,6 +76,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _maxHr = profile['max_hr'] as int? ?? 180;
           _weightKg = (profile['weight_kg'] as num?)?.toDouble() ?? 70.0;
           _autoConnectHr = (profile['auto_connect_hr'] as int? ?? 1) == 1;
+          _healthEnabled = (profile['health_enabled'] as int? ?? 0) == 1;
         });
       }
     } catch (e) {
@@ -92,6 +95,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'max_hr': _maxHr,
           'weight_kg': _weightKg,
           'auto_connect_hr': _autoConnectHr ? 1 : 0,
+          'health_enabled': _healthEnabled ? 1 : 0,
         },
         where: 'name = ?',
         whereArgs: [_profileName],
@@ -104,6 +108,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       debugPrint('Error saving profile: \$e');
+    }
+  }
+
+  Future<void> _onHealthToggled(bool value) async {
+    if (value) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Apple Health Integration'),
+          content: const Text(
+            'Apple Health is bound to this device\'s active Apple ID. '
+            'If you share this device with other profiles, saving workouts may mix data in your Apple Health app.\n\n'
+            'Do you want to enable Apple Health for this profile?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Enable'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true) {
+        final granted = await HealthService.instance.requestPermissions();
+        setState(() {
+          _healthEnabled = granted;
+        });
+        if (!granted && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Apple Health permissions denied or not configured.')),
+          );
+        }
+      }
+    } else {
+      setState(() {
+        _healthEnabled = false;
+      });
     }
   }
 
@@ -250,6 +296,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: const Text('Auto-connect Heart Rate Monitor'),
               value: _autoConnectHr,
               onChanged: (val) => setState(() => _autoConnectHr = val),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Connect Apple Health'),
+              subtitle: const Text('Saves workouts and active energy to Apple Health'),
+              value: _healthEnabled,
+              onChanged: _onHealthToggled,
             ),
             const SizedBox(height: 32),
             const Text('Cloud Sync', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),

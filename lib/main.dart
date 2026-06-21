@@ -1,15 +1,23 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'screens/timer_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/profile_screen.dart';
 import 'services/sync_service.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Silence verbose Bluetooth logs (e.g. FBP-iOS didUpdateValueForCharacteristic)
+  FlutterBluePlus.setLogLevel(LogLevel.none, color: false);
+
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     // Trigger initial background sync
     SyncService.instance.signInAndSync();
   } catch (e) {
@@ -17,6 +25,7 @@ void main() async {
   }
   runApp(const EmomTimerApp());
 }
+
 
 class EmomTimerApp extends StatelessWidget {
   const EmomTimerApp({super.key});

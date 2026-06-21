@@ -194,5 +194,93 @@ void main() {
 
       await dbV3.close();
     });
+
+    test('Create DB version 4 contains health_enabled column in profiles', () async {
+      final db = await openDatabase(
+        dbPath,
+        version: 4,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                max_hr INTEGER,
+                max_prework_hr INTEGER,
+                sex TEXT,
+                birth_date TEXT,
+                weight_kg REAL,
+                weight_unit_pref TEXT,
+                auto_connect_hr INTEGER,
+                health_enabled INTEGER DEFAULT 0
+            )
+          ''');
+        },
+      );
+
+      await db.insert('profiles', {
+        'name': 'Default',
+        'created_at': DateTime.now().toIso8601String(),
+        'health_enabled': 1,
+      });
+
+      final res = await db.query('profiles');
+      expect(res.length, equals(1));
+      expect(res.first['health_enabled'], equals(1));
+
+      await db.close();
+    });
+
+    test('Migration from version 3 to 4 adds health_enabled column to profiles', () async {
+      // 1. Create a version 3 database schema
+      final db = await openDatabase(
+        dbPath,
+        version: 3,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                max_hr INTEGER,
+                max_prework_hr INTEGER,
+                sex TEXT,
+                birth_date TEXT,
+                weight_kg REAL,
+                weight_unit_pref TEXT,
+                auto_connect_hr INTEGER
+            )
+          ''');
+        },
+      );
+
+      await db.insert('profiles', {
+        'name': 'Default',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      await db.close();
+
+      // 2. Open it with version 4 to trigger the upgrade
+      final dbV4 = await openDatabase(
+        dbPath,
+        version: 4,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 4) {
+            await db.execute('ALTER TABLE profiles ADD COLUMN health_enabled INTEGER DEFAULT 0');
+          }
+        },
+      );
+
+      // Verify and update health_enabled
+      await dbV4.update(
+        'profiles',
+        {'health_enabled': 1},
+        where: 'name = ?',
+        whereArgs: ['Default'],
+      );
+
+      final res = await dbV4.query('profiles');
+      expect(res.first['health_enabled'], equals(1));
+
+      await dbV4.close();
+    });
   });
 }

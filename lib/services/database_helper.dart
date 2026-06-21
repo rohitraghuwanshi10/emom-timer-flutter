@@ -99,7 +99,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 3,
+        version: 4,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -120,6 +120,9 @@ class DatabaseHelper {
           if (oldVersion < 3) {
             await db.execute('ALTER TABLE workouts ADD COLUMN workout_name TEXT');
           }
+          if (oldVersion < 4) {
+            await db.execute('ALTER TABLE profiles ADD COLUMN health_enabled INTEGER DEFAULT 0');
+          }
         },
       ),
     );
@@ -136,7 +139,8 @@ class DatabaseHelper {
           birth_date TEXT,
           weight_kg REAL,
           weight_unit_pref TEXT,
-          auto_connect_hr INTEGER
+          auto_connect_hr INTEGER,
+          health_enabled INTEGER DEFAULT 0
       )
     ''');
 

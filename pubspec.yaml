@@ -41,7 +41,7 @@ dependencies:
   watch_connectivity: ^0.2.9
   fl_chart: ^1.2.0
   audioplayers: ^6.7.1
-  health: ^3.0.6
+  health: ^13.3.1
   window_manager: ^0.5.1
   wakelock_plus: ^1.2.8
   path: ^1.9.1

@@ -1,27 +1,21 @@
 PODS:
-  - device_info (0.0.1):
-    - Flutter
   - Flutter (1.0.0)
-  - health (1.0.1):
+  - health (13.3.1):
     - Flutter
 
 DEPENDENCIES:
-  - device_info (from `.symlinks/plugins/device_info/ios`)
   - Flutter (from `Flutter`)
   - health (from `.symlinks/plugins/health/ios`)
 
 EXTERNAL SOURCES:
-  device_info:
-    :path: ".symlinks/plugins/device_info/ios"
   Flutter:
     :path: Flutter
   health:
     :path: ".symlinks/plugins/health/ios"
 
 SPEC CHECKSUMS:
-  device_info: 52e8c0c9c61def8d0a92bf175f5f500abbea04bc
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  health: b7fb0667335886c1556277544a41325aa4b8e805
+  health: 4decf5d74e8f54c58a8c07a385fc72f629a831d9
 
 PODFILE CHECKSUM: 4b015915ec662986b54bf30ab778da63f7dda016
 
