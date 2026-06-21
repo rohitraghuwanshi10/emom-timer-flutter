@@ -48,6 +48,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   bool _continuousMode = false;
   final TextEditingController _notesController = TextEditingController();
   String? _loadedTemplateName;
+  String _activityType = 'HIIT';
   
   // Cache variables for calorie/zone calculations
   int _maxHr = 180;
@@ -459,6 +460,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         caloriesBurntKcal: caloriesBurnt,
         notes: notes,
         hrLogs: _hrDetails,
+        activityType: _activityType,
       );
       
       debugPrint("TimerScreen: _healthEnabled is $_healthEnabled");
@@ -469,6 +471,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           totalCalories: caloriesBurnt.round(),
           title: _loadedTemplateName ?? 'EMOM Workout',
           heartRateData: _hrDetails,
+          activityTypeStr: _activityType,
         );
       }
 
@@ -527,6 +530,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     'rest_time': _restDuration,
                     'notes': _notesController.text,
                     'continuous_mode': _continuousMode ? 1 : 0,
+                    'activity_type': _activityType,
                   }, conflictAlgorithm: ConflictAlgorithm.replace);
                   if (context.mounted) {
                     Navigator.pop(context);
@@ -579,6 +583,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     _restDuration = t['rest_time'] as int;
                     _notesController.text = t['notes'] as String? ?? '';
                     _continuousMode = (t['continuous_mode'] as int? ?? 0) == 1;
+                    _activityType = t['activity_type'] as String? ?? 'HIIT';
                     _loadedTemplateName = t['template_name'] as String?;
                   });
                   if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
@@ -766,6 +771,56 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               ),
               value: _saveHistoryEnabled,
               onChanged: (val) => setState(() => _saveHistoryEnabled = val),
+            ),
+            const Divider(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Activity Type'),
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _showHelpDialog(
+                        'Activity Type',
+                        'Select the exercise category. This value is used to categorize the workout when saving it to Apple Health.',
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Icon(
+                          Icons.help_outline,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                DropdownButton<String>(
+                  value: _activityType,
+                  items: const [
+                    DropdownMenuItem(value: 'HIIT', child: Text('HIIT / Interval')),
+                    DropdownMenuItem(value: 'STRENGTH', child: Text('Strength Training')),
+                    DropdownMenuItem(value: 'FUNCTIONAL_STRENGTH', child: Text('Functional Strength')),
+                    DropdownMenuItem(value: 'CORE', child: Text('Core Training')),
+                    DropdownMenuItem(value: 'CARDIO', child: Text('Mixed Cardio')),
+                    DropdownMenuItem(value: 'YOGA', child: Text('Yoga')),
+                    DropdownMenuItem(value: 'PILATES', child: Text('Pilates')),
+                    DropdownMenuItem(value: 'CALISTHENICS', child: Text('Calisthenics')),
+                    DropdownMenuItem(value: 'OTHER', child: Text('Other')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _activityType = val;
+                        _loadedTemplateName = null;
+                      });
+                    }
+                  },
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             TextField(

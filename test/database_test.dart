@@ -282,5 +282,101 @@ void main() {
 
       await dbV4.close();
     });
+
+    test('Create DB version 5 contains activity_type in templates and workouts', () async {
+      final db = await openDatabase(
+        dbPath,
+        version: 5,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workout_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_name TEXT,
+                activity_type TEXT DEFAULT 'HIIT'
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workout_name TEXT,
+                activity_type TEXT DEFAULT 'HIIT'
+            )
+          ''');
+        },
+      );
+
+      await db.insert('workout_templates', {
+        'template_name': 'My Template',
+        'activity_type': 'STRENGTH',
+      });
+      await db.insert('workouts', {
+        'workout_name': 'My Workout',
+        'activity_type': 'CARDIO',
+      });
+
+      final templates = await db.query('workout_templates');
+      expect(templates.length, equals(1));
+      expect(templates.first['activity_type'], equals('STRENGTH'));
+
+      final workouts = await db.query('workouts');
+      expect(workouts.length, equals(1));
+      expect(workouts.first['activity_type'], equals('CARDIO'));
+
+      await db.close();
+    });
+
+    test('Migration from version 4 to 5 adds activity_type columns', () async {
+      // 1. Create a version 4 database schema
+      final db = await openDatabase(
+        dbPath,
+        version: 4,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workout_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_name TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workout_name TEXT
+            )
+          ''');
+        },
+      );
+
+      await db.insert('workout_templates', {'template_name': 'Legacy Template'});
+      await db.insert('workouts', {'workout_name': 'Legacy Workout'});
+      await db.close();
+
+      // 2. Open it with version 5 to trigger the upgrade
+      final dbV5 = await openDatabase(
+        dbPath,
+        version: 5,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 5) {
+            await db.execute("ALTER TABLE workout_templates ADD COLUMN activity_type TEXT DEFAULT 'HIIT'");
+            await db.execute("ALTER TABLE workouts ADD COLUMN activity_type TEXT DEFAULT 'HIIT'");
+          }
+        },
+      );
+
+      // Verify and update
+      await dbV5.update(
+        'workout_templates',
+        {'activity_type': 'STRENGTH'},
+        where: 'id = ?',
+        whereArgs: [1],
+      );
+
+      final templates = await dbV5.query('workout_templates');
+      expect(templates.first['activity_type'], equals('STRENGTH'));
+
+      final workouts = await dbV5.query('workouts');
+      expect(workouts.first['activity_type'], equals('HIIT')); // defaults to HIIT
+
+      await dbV5.close();
+    });
   });
 }

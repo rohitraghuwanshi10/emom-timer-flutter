@@ -144,12 +144,38 @@ class HealthService {
     }
   }
 
+  HealthWorkoutActivityType _mapStringToActivityType(String? typeStr) {
+    if (typeStr == null) return HealthWorkoutActivityType.HIGH_INTENSITY_INTERVAL_TRAINING;
+    switch (typeStr) {
+      case 'HIIT':
+        return HealthWorkoutActivityType.HIGH_INTENSITY_INTERVAL_TRAINING;
+      case 'STRENGTH':
+        return HealthWorkoutActivityType.TRADITIONAL_STRENGTH_TRAINING;
+      case 'FUNCTIONAL_STRENGTH':
+        return HealthWorkoutActivityType.FUNCTIONAL_STRENGTH_TRAINING;
+      case 'CORE':
+        return HealthWorkoutActivityType.CORE_TRAINING;
+      case 'CARDIO':
+        return HealthWorkoutActivityType.MIXED_CARDIO;
+      case 'YOGA':
+        return HealthWorkoutActivityType.YOGA;
+      case 'PILATES':
+        return HealthWorkoutActivityType.PILATES;
+      case 'CALISTHENICS':
+        return HealthWorkoutActivityType.CALISTHENICS;
+      case 'OTHER':
+      default:
+        return HealthWorkoutActivityType.OTHER;
+    }
+  }
+
   Future<void> saveWorkout({
     required DateTime start,
     required DateTime end,
     required int totalCalories,
     required String title,
     List<Map<String, dynamic>> heartRateData = const [],
+    String? activityTypeStr,
   }) async {
     if (Platform.isMacOS) return;
     await _ensureConfigured();
@@ -165,8 +191,8 @@ class HealthService {
 
       debugPrint("HealthService: Writing workout to Apple Health/Health Connect...");
       
-      // Determine activity type - default to HIIT
-      final activityType = HealthWorkoutActivityType.HIGH_INTENSITY_INTERVAL_TRAINING;
+      // Determine activity type
+      final activityType = _mapStringToActivityType(activityTypeStr);
 
       bool workoutSaved = await _health.writeWorkoutData(
         activityType: activityType,

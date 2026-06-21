@@ -142,6 +142,7 @@ class SyncService extends ChangeNotifier {
         'rest_time': local['rest_time'],
         'notes': local['notes'],
         'continuous_mode': local['continuous_mode'] ?? 0,
+        'activity_type': local['activity_type'] ?? 'HIIT',
       }, SetOptions(merge: true));
     }
 
@@ -162,6 +163,7 @@ class SyncService extends ChangeNotifier {
           'rest_time': data['rest_time'],
           'notes': data['notes'],
           'continuous_mode': data['continuous_mode'] ?? 0,
+          'activity_type': data['activity_type'] ?? 'HIIT',
         });
         debugPrint('SyncService: Downloaded template $tName for profile $pName');
       } else {
@@ -172,6 +174,7 @@ class SyncService extends ChangeNotifier {
           'rest_time': data['rest_time'],
           'notes': data['notes'],
           'continuous_mode': data['continuous_mode'] ?? 0,
+          'activity_type': data['activity_type'] ?? 'HIIT',
         }, where: 'profile_name = ? AND template_name = ?', whereArgs: [pName, tName]);
       }
     }
@@ -226,6 +229,7 @@ class SyncService extends ChangeNotifier {
           'avg_hr': w['avg_hr'],
           'calories_burnt_kcal': w['calories_burnt_kcal'],
           'notes': w['notes'],
+          'activity_type': w['activity_type'] ?? 'HIIT',
           'hr_details': hrDataList,
         });
         
@@ -285,6 +289,7 @@ class SyncService extends ChangeNotifier {
             'avg_hr': data['avg_hr'],
             'calories_burnt_kcal': data['calories_burnt_kcal'],
             'notes': data['notes'],
+            'activity_type': data['activity_type'] ?? 'HIIT',
           });
           
           final List<dynamic> hrDetails = data['hr_details'] ?? [];

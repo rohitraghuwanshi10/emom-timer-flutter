@@ -99,7 +99,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 4,
+        version: 5,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -122,6 +122,18 @@ class DatabaseHelper {
           }
           if (oldVersion < 4) {
             await db.execute('ALTER TABLE profiles ADD COLUMN health_enabled INTEGER DEFAULT 0');
+          }
+          if (oldVersion < 5) {
+            try {
+              await db.execute("ALTER TABLE workout_templates ADD COLUMN activity_type TEXT DEFAULT 'HIIT'");
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for workout_templates activity_type: $e');
+            }
+            try {
+              await db.execute("ALTER TABLE workouts ADD COLUMN activity_type TEXT DEFAULT 'HIIT'");
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for workouts activity_type: $e');
+            }
           }
         },
       ),
@@ -154,6 +166,7 @@ class DatabaseHelper {
           rest_time INTEGER,
           notes TEXT,
           continuous_mode INTEGER DEFAULT 0,
+          activity_type TEXT DEFAULT 'HIIT',
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE,
           UNIQUE(profile_name, template_name)
       )
@@ -177,6 +190,7 @@ class DatabaseHelper {
           calories_burnt_kcal REAL,
           notes TEXT,
           details_file_legacy TEXT,
+          activity_type TEXT DEFAULT 'HIIT',
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE
       )
     ''');
@@ -239,6 +253,7 @@ class DatabaseHelper {
     required double caloriesBurntKcal,
     required String notes,
     required List<Map<String, dynamic>> hrLogs,
+    String activityType = 'HIIT',
   }) async {
     final db = await database;
     try {
@@ -258,6 +273,7 @@ class DatabaseHelper {
           'avg_hr': avgHr,
           'calories_burnt_kcal': caloriesBurntKcal,
           'notes': notes,
+          'activity_type': activityType,
         });
 
         for (var log in hrLogs) {
