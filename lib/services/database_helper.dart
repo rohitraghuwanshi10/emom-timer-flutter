@@ -99,7 +99,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 5,
+        version: 6,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -135,6 +135,13 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for workouts activity_type: $e');
             }
           }
+          if (oldVersion < 6) {
+            try {
+              await db.execute('ALTER TABLE profiles ADD COLUMN save_history INTEGER DEFAULT 1');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for profiles save_history: $e');
+            }
+          }
         },
       ),
     );
@@ -152,7 +159,8 @@ class DatabaseHelper {
           weight_kg REAL,
           weight_unit_pref TEXT,
           auto_connect_hr INTEGER,
-          health_enabled INTEGER DEFAULT 0
+          health_enabled INTEGER DEFAULT 0,
+          save_history INTEGER DEFAULT 1
       )
     ''');
 

@@ -378,5 +378,63 @@ void main() {
 
       await dbV5.close();
     });
+
+    test('Create DB version 6 contains save_history in profiles', () async {
+      final db = await openDatabase(
+        dbPath,
+        version: 6,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY,
+                save_history INTEGER DEFAULT 1
+            )
+          ''');
+        },
+      );
+
+      await db.insert('profiles', {
+        'name': 'Test User',
+        'save_history': 0,
+      });
+
+      final profiles = await db.query('profiles');
+      expect(profiles.length, equals(1));
+      expect(profiles.first['save_history'], equals(0));
+
+      await db.close();
+    });
+
+    test('Migration from version 5 to 6 adds save_history to profiles', () async {
+      final db = await openDatabase(
+        dbPath,
+        version: 5,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY
+            )
+          ''');
+        },
+      );
+
+      await db.insert('profiles', {'name': 'Legacy Profile'});
+      await db.close();
+
+      final dbV6 = await openDatabase(
+        dbPath,
+        version: 6,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 6) {
+            await db.execute('ALTER TABLE profiles ADD COLUMN save_history INTEGER DEFAULT 1');
+          }
+        },
+      );
+
+      final profiles = await dbV6.query('profiles');
+      expect(profiles.first['save_history'], equals(1)); // defaults to 1
+
+      await dbV6.close();
+    });
   });
 }

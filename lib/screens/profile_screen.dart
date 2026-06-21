@@ -20,6 +20,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   double _weightKg = 70.0;
   bool _autoConnectHr = true;
   bool _healthEnabled = false;
+  bool _saveHistory = true;
   String? _sex;
   String? _birthDate;
 
@@ -82,6 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _weightKg = (profile['weight_kg'] as num?)?.toDouble() ?? 70.0;
           _autoConnectHr = (profile['auto_connect_hr'] as int? ?? 1) == 1;
           _healthEnabled = (profile['health_enabled'] as int? ?? 0) == 1;
+          _saveHistory = (profile['save_history'] as int? ?? 1) == 1;
           _sex = profile['sex'] as String?;
           _birthDate = profile['birth_date'] as String?;
         });
@@ -103,6 +105,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'weight_kg': _weightKg,
           'auto_connect_hr': _autoConnectHr ? 1 : 0,
           'health_enabled': _healthEnabled ? 1 : 0,
+          'save_history': _saveHistory ? 1 : 0,
           'sex': _sex,
           'birth_date': _birthDate,
         },
@@ -370,6 +373,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               value: _autoConnectHr,
               onChanged: (val) async {
                 setState(() => _autoConnectHr = val);
+                await _saveProfile(showFeedback: false);
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Save Workout History'),
+              subtitle: const Text('Automatically record completed sessions and heart rate details.'),
+              value: _saveHistory,
+              onChanged: (val) async {
+                setState(() => _saveHistory = val);
                 await _saveProfile(showFeedback: false);
               },
             ),

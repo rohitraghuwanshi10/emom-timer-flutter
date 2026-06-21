@@ -91,6 +91,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
             _sex = profile['sex'] as String?;
             _weightKg = profile['weight_kg'] as double? ?? 70.0;
             _healthEnabled = (profile['health_enabled'] as int? ?? 0) == 1;
+            _saveHistoryEnabled = (profile['save_history'] as int? ?? 1) == 1;
             
             // Auto-check if Bluetooth is connected and maxPreworkHr is configured
             if (_isBluetoothConnected) {
@@ -743,33 +744,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               value: _continuousMode,
               onChanged: (val) => setState(() => _continuousMode = val),
             ),
-            SwitchListTile(
-              title: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Save History'),
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _showHelpDialog(
-                      'Save History',
-                      'Record this workout summary and second-by-second heart rate logs to the local database and synchronize with the cloud.',
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4.0),
-                      child: Icon(
-                        Icons.help_outline,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              value: _saveHistoryEnabled,
-              onChanged: (val) => setState(() => _saveHistoryEnabled = val),
-            ),
-            const Divider(),
+
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

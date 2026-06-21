@@ -84,6 +84,7 @@ class SyncService extends ChangeNotifier {
         'weight_kg': local['weight_kg'],
         'weight_unit_pref': local['weight_unit_pref'],
         'auto_connect_hr': local['auto_connect_hr'],
+        'save_history': local['save_history'] ?? 1,
       }, SetOptions(merge: true));
     }
 
@@ -105,6 +106,7 @@ class SyncService extends ChangeNotifier {
           'weight_kg': data['weight_kg'],
           'weight_unit_pref': data['weight_unit_pref'],
           'auto_connect_hr': data['auto_connect_hr'],
+          'save_history': data['save_history'] ?? 1,
         });
         debugPrint('SyncService: Downloaded profile $name');
       } else {
@@ -117,6 +119,7 @@ class SyncService extends ChangeNotifier {
           'weight_kg': data['weight_kg'],
           'weight_unit_pref': data['weight_unit_pref'],
           'auto_connect_hr': data['auto_connect_hr'],
+          'save_history': data['save_history'] ?? 1,
         }, where: 'name = ?', whereArgs: [name]);
       }
     }
