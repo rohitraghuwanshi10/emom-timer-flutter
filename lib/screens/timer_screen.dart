@@ -506,7 +506,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   }
 
   Future<void> _showSaveTemplateDialog() async {
-    final controller = TextEditingController();
+    final TextEditingController controller = TextEditingController(text: _loadedTemplateName);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -637,7 +637,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     onChanged: (val) {
                       setState(() {
                         _workDuration = val.toInt();
-                        _loadedTemplateName = null;
                       });
                       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
                     },
@@ -660,7 +659,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     onChanged: (val) {
                       setState(() {
                         _restDuration = val.toInt();
-                        _loadedTemplateName = null;
                       });
                       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
                     },
@@ -683,7 +681,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     onChanged: (val) {
                       setState(() {
                         _totalRounds = val.toInt();
-                        _loadedTemplateName = null;
                       });
                       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
                     },
@@ -815,7 +812,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     if (val != null) {
                       setState(() {
                         _activityType = val;
-                        _loadedTemplateName = null;
                       });
                     }
                   },
@@ -1053,6 +1049,53 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               const SizedBox(height: 8),
               _buildProfileSelector(isIdle),
               const SizedBox(height: 16),
+              if (_loadedTemplateName != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.star_outline,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _loadedTemplateName!,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      if (isIdle) ...[
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _loadedTemplateName = null;
+                            });
+                          },
+                          child: const Icon(
+                            Icons.cancel_outlined,
+                            size: 16,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               _buildTimerDisplay(),
               const SizedBox(height: 24),
               _buildLiveHeartRateDisplay(),
