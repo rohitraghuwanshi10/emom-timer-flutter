@@ -20,6 +20,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   double _weightKg = 70.0;
   bool _autoConnectHr = true;
   bool _healthEnabled = false;
+  String? _sex;
+  String? _birthDate;
 
   Future<void> _triggerSync() async {
     final success = await SyncService.instance.signInAndSync();
@@ -80,6 +82,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _weightKg = (profile['weight_kg'] as num?)?.toDouble() ?? 70.0;
           _autoConnectHr = (profile['auto_connect_hr'] as int? ?? 1) == 1;
           _healthEnabled = (profile['health_enabled'] as int? ?? 0) == 1;
+          _sex = profile['sex'] as String?;
+          _birthDate = profile['birth_date'] as String?;
         });
       }
     } catch (e) {
@@ -88,7 +92,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isLoading = false);
   }
 
-  Future<void> _saveProfile() async {
+  Future<void> _saveProfile({bool showFeedback = true}) async {
     try {
       final db = await DatabaseHelper.instance.database;
       await db.update(
@@ -99,18 +103,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'weight_kg': _weightKg,
           'auto_connect_hr': _autoConnectHr ? 1 : 0,
           'health_enabled': _healthEnabled ? 1 : 0,
+          'sex': _sex,
+          'birth_date': _birthDate,
         },
         where: 'name = ?',
         whereArgs: [_profileName],
       );
       
-      if (mounted) {
+      if (showFeedback && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile saved successfully!')),
         );
       }
     } catch (e) {
-      debugPrint('Error saving profile: \$e');
+      debugPrint('Error saving profile: $e');
     }
   }
 
@@ -121,8 +127,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         builder: (context) => AlertDialog(
           title: const Text('Apple Health Integration'),
           content: const Text(
-            'Apple Health is bound to this device\'s active Apple ID. '
-            'If you share this device with other profiles, saving workouts may mix data in your Apple Health app.\n\n'
+            'ChronoPulse Active will request permission to save your workouts, heart rate logs, and active energy (calories) to Apple Health.\n\n'
+            'We will also request read permission for your Biological Sex and Date of Birth. This allows us to auto-populate your profile and compute accurate heart rate zone-based calorie burn estimations during workouts.\n\n'
+            'Note: Apple Health is bound to this device\'s active Apple ID. If you share this device with other profiles, saving workouts may mix data in your Apple Health app.\n\n'
             'Do you want to enable Apple Health for this profile?',
           ),
           actions: [
@@ -143,6 +150,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() {
           _healthEnabled = granted;
         });
+        if (granted) {
+          final characteristics = await HealthService.instance.getCharacteristics();
+          setState(() {
+            if (characteristics['sex'] != null) {
+              _sex = characteristics['sex'];
+            }
+            if (characteristics['birth_date'] != null) {
+              _birthDate = characteristics['birth_date'];
+            }
+            if (characteristics['weight'] != null) {
+              final parsedWeight = double.tryParse(characteristics['weight']!);
+              if (parsedWeight != null) {
+                _weightKg = parsedWeight.clamp(40.0, 150.0);
+              }
+            }
+          });
+        }
+        await _saveProfile(showFeedback: false);
         if (!granted && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Apple Health permissions denied or not configured.')),
@@ -153,6 +178,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _healthEnabled = false;
       });
+      await _saveProfile(showFeedback: false);
+    }
+  }
+
+  Future<void> _selectBirthDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate != null ? DateTime.parse(_birthDate!) : DateTime(1990, 1, 1),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _birthDate = picked.toIso8601String().substring(0, 10);
+      });
+      await _saveProfile(showFeedback: false);
     }
   }
 
@@ -235,7 +276,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const Divider(height: 32),
             const Text('Heart Rate Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 16),
-            Row(
+             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Max Pre-Work HR (bpm)'),
@@ -247,6 +288,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     divisions: 100,
                     label: '$_maxPreworkHr',
                     onChanged: (val) => setState(() => _maxPreworkHr = val.toInt()),
+                    onChangeEnd: (val) => _saveProfile(showFeedback: false),
                   ),
                 ),
                 Text('$_maxPreworkHr', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -269,6 +311,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     divisions: 80,
                     label: '$_maxHr',
                     onChanged: (val) => setState(() => _maxHr = val.toInt()),
+                    onChangeEnd: (val) => _saveProfile(showFeedback: false),
                   ),
                 ),
                 Text('$_maxHr', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -277,7 +320,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 32),
             const Text('General', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 16),
-            Row(
+             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Weight (kg)'),
@@ -289,21 +332,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     divisions: 110,
                     label: _weightKg.toStringAsFixed(1),
                     onChanged: (val) => setState(() => _weightKg = val),
+                    onChangeEnd: (val) => _saveProfile(showFeedback: false),
                   ),
                 ),
                 Text(_weightKg.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
             ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Birth Date'),
+              subtitle: Text(_birthDate ?? 'Not set (defaults to age 35 for calories)'),
+              trailing: const Icon(Icons.calendar_today),
+              onTap: _selectBirthDate,
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Sex'),
+              trailing: DropdownButton<String>(
+                value: _sex,
+                hint: const Text('Select (defaults to Male for calories)'),
+                underline: const SizedBox(),
+                items: const [
+                  DropdownMenuItem(value: 'Male', child: Text('Male')),
+                  DropdownMenuItem(value: 'Female', child: Text('Female')),
+                ],
+                onChanged: (val) async {
+                  setState(() {
+                    _sex = val;
+                  });
+                  await _saveProfile(showFeedback: false);
+                },
+              ),
+            ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Auto-connect Heart Rate Monitor'),
               value: _autoConnectHr,
-              onChanged: (val) => setState(() => _autoConnectHr = val),
+              onChanged: (val) async {
+                setState(() => _autoConnectHr = val);
+                await _saveProfile(showFeedback: false);
+              },
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Connect Apple Health'),
-              subtitle: const Text('Saves workouts and active energy to Apple Health'),
+              subtitle: const Text('Saves workouts/active energy. Reads sex, birth date, and weight to calculate target heart rate zones and calorie burn.'),
               value: _healthEnabled,
               onChanged: _onHealthToggled,
             ),

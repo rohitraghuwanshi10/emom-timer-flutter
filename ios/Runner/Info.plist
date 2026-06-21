@@ -33,7 +33,7 @@
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>This app needs Bluetooth to connect to your Heart Rate monitor.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>ChronoPulse Active needs read access to Apple Health to analyze your heart rate zones and track workout history.</string>
+	<string>ChronoPulse Active needs read access to Apple Health to retrieve your Biological Sex, Date of Birth, and Weight to auto-populate your profile and calculate accurate target heart rate zones and calorie burn rates, as well as tracking workout history.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>ChronoPulse Active needs write access to Apple Health to save completed EMOM workouts and active calories burned.</string>
 	<key>UIApplicationSceneManifest</key>

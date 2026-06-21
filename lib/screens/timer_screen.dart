@@ -418,21 +418,28 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       }
 
       double caloriesBurnt = 0.0;
-      if (_birthDate != null && _sex != null && avgHr > 0) {
-        final age = _calculateAge(_birthDate!);
-        final totalMins = totalTime / 60.0;
-        double weight = _weightKg;
+      final totalMins = totalTime / 60.0;
+      double weight = _weightKg;
+
+      if (avgHr > 0) {
+        final age = _birthDate != null ? _calculateAge(_birthDate!) : 35;
+        final sex = _sex ?? 'Male';
         
         double cpm;
-        if (_sex == 'Male') {
+        if (sex == 'Male') {
           cpm = (-55.0969 + (0.6309 * avgHr) + (0.1988 * weight) + (0.2017 * age)) / 4.184;
         } else {
           cpm = (-20.4022 + (0.4472 * avgHr) - (0.1263 * weight) + (0.074 * age)) / 4.184;
         }
         caloriesBurnt = cpm * totalMins;
-        if (caloriesBurnt < 0) caloriesBurnt = 0.0;
-        caloriesBurnt = double.parse(caloriesBurnt.toStringAsFixed(2));
+      } else {
+        // Fallback MET-based formula (MET value of 8.5 for HIIT/EMOM)
+        const double met = 8.5;
+        caloriesBurnt = met * 3.5 * weight / 200 * totalMins;
       }
+
+      if (caloriesBurnt < 0) caloriesBurnt = 0.0;
+      caloriesBurnt = double.parse(caloriesBurnt.toStringAsFixed(2));
 
       final notes = _notesController.text;
       
@@ -454,6 +461,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         hrLogs: _hrDetails,
       );
       
+      debugPrint("TimerScreen: _healthEnabled is $_healthEnabled");
       if (_healthEnabled) {
         HealthService.instance.saveWorkout(
           start: _workoutStartTime!,
