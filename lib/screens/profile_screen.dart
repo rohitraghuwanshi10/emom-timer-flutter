@@ -13,7 +13,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
-  bool _isSyncing = false;
   String _profileName = 'Default';
   List<String> _availableProfiles = [];
   int _maxPreworkHr = 130;
@@ -23,18 +22,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _healthEnabled = false;
 
   Future<void> _triggerSync() async {
-    setState(() => _isSyncing = true);
-    
-    // Poll the sync status to update the UI
-    final timer = Timer.periodic(const Duration(milliseconds: 150), (_) {
-      if (mounted) setState(() {});
-    });
-
     final success = await SyncService.instance.signInAndSync();
-    timer.cancel();
 
     if (mounted) {
-      setState(() => _isSyncing = false);
       String msg = success 
           ? 'Sync completed successfully!' 
           : 'Sync failed: ${SyncService.instance.lastError ?? "Unknown error"}';
@@ -52,6 +42,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadProfile();
+    SyncService.instance.addListener(_onSyncStatusChanged);
+  }
+
+  void _onSyncStatusChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    SyncService.instance.removeListener(_onSyncStatusChanged);
+    super.dispose();
   }
 
   Future<void> _loadProfile([String? forceProfile]) async {
@@ -311,12 +314,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               contentPadding: EdgeInsets.zero,
               title: const Text('Cloud Sync'),
               subtitle: Text(
-                _isSyncing 
+                SyncService.instance.isSyncing 
                     ? 'Status: ${SyncService.instance.syncStatus}' 
                     : 'Profiles, templates, and history are synced to the cloud.',
                 style: const TextStyle(fontSize: 12),
               ),
-              trailing: _isSyncing 
+              trailing: SyncService.instance.isSyncing 
                   ? const SizedBox(
                       width: 24, 
                       height: 24, 

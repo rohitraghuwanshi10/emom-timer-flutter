@@ -11,6 +11,10 @@ class AppBluetoothService {
   StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
   StreamSubscription<List<int>>? _hrSubscription;
 
+  BluetoothConnectionState _lastConnectionState = BluetoothConnectionState.disconnected;
+  bool get isConnected => _lastConnectionState == BluetoothConnectionState.connected;
+  BluetoothConnectionState get connectionState => _lastConnectionState;
+
   final _hrController = StreamController<int>.broadcast();
   Stream<int> get heartRateStream => _hrController.stream;
 
@@ -94,6 +98,7 @@ class AppBluetoothService {
     _connectedDevice = device;
     
     _connectionSubscription = device.connectionState.listen((state) async {
+      _lastConnectionState = state;
       _deviceStateController.add(state);
       debugPrint("BluetoothService: Connection state: $state");
       
@@ -165,5 +170,7 @@ class AppBluetoothService {
     await _connectionSubscription?.cancel();
     await _connectedDevice?.disconnect();
     _connectedDevice = null;
+    _lastConnectionState = BluetoothConnectionState.disconnected;
+    _deviceStateController.add(BluetoothConnectionState.disconnected);
   }
 }

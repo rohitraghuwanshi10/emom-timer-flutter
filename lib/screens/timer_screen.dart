@@ -117,6 +117,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   }
 
   void _setupBluetooth() {
+    _isBluetoothConnected = AppBluetoothService.instance.isConnected;
     _btStateSubscription = AppBluetoothService.instance.deviceStateStream.listen((state) {
       if (mounted) {
         setState(() {
