@@ -8,10 +8,10 @@ class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  State<ProfileScreen> createState() => ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   String _profileName = 'Default';
   List<String> _availableProfiles = [];
@@ -37,14 +37,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           duration: const Duration(seconds: 5),
         ),
       );
-      _loadProfile();
+      loadProfile();
     }
   }
 
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    loadProfile();
     SyncService.instance.addListener(_onSyncStatusChanged);
   }
 
@@ -60,7 +60,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  Future<void> _loadProfile([String? forceProfile]) async {
+  Future<void> loadProfile([String? forceProfile]) async {
     setState(() => _isLoading = true);
     try {
       final db = await DatabaseHelper.instance.database;
@@ -200,56 +200,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Widget _buildProfileSelector() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-          width: 1,
+  Future<void> _onProfileChanged(String val) async {
+    await DatabaseHelper.instance.setActiveProfileName(val);
+    await loadProfile(val);
+  }
+
+  Widget _buildProfileSelectorAction() {
+    if (_availableProfiles.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Chip(
+          avatar: Icon(Icons.person, size: 14, color: Theme.of(context).colorScheme.primary),
+          label: Text(_profileName, style: const TextStyle(fontSize: 12)),
+          padding: EdgeInsets.zero,
         ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.person,
-            size: 20,
-            color: Theme.of(context).colorScheme.primary,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+      child: PopupMenuButton<String>(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+            ),
+            color: Theme.of(context).colorScheme.surface,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _availableProfiles.isEmpty
-                ? Text(
-                    _profileName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  )
-                : DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _profileName,
-                      isExpanded: true,
-                      isDense: true,
-                      dropdownColor: Theme.of(context).colorScheme.surface,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
-                      items: _availableProfiles.map((p) {
-                        return DropdownMenuItem(value: p, child: Text(p));
-                      }).toList(),
-                      onChanged: (val) async {
-                        if (val != null) {
-                          await DatabaseHelper.instance.setActiveProfileName(val);
-                          _loadProfile(val);
-                        }
-                      },
-                    ),
-                  ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.person,
+                size: 14,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _profileName,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const Icon(
+                Icons.arrow_drop_down,
+                size: 14,
+                color: Colors.white,
+              ),
+            ],
           ),
-        ],
+        ),
+        onSelected: (val) async {
+          await _onProfileChanged(val);
+        },
+        itemBuilder: (context) {
+          return _availableProfiles.map((p) {
+            return PopupMenuItem<String>(
+              value: p,
+              child: Text(p),
+            );
+          }).toList();
+        },
       ),
     );
   }
@@ -264,6 +279,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Profile Management'),
         actions: [
+          _buildProfileSelectorAction(),
           IconButton(
             icon: const Icon(Icons.save),
             onPressed: _saveProfile,
@@ -275,8 +291,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildProfileSelector(),
-            const Divider(height: 32),
             const Text('Heart Rate Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 16),
              Row(

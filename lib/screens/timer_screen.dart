@@ -118,6 +118,21 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     await loadProfileSettings();
   }
 
+  void loadTemplate(Map<String, dynamic> template) {
+    if (mounted) {
+      setState(() {
+        _totalRounds = template['rounds'] as int;
+        _workDuration = template['work_time'] as int;
+        _restDuration = template['rest_time'] as int;
+        _notesController.text = template['notes'] as String? ?? '';
+        _continuousMode = (template['continuous_mode'] as int? ?? 0) == 1;
+        _activityType = template['activity_type'] as String? ?? 'HIIT';
+        _loadedTemplateName = template['template_name'] as String?;
+      });
+      if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
+    }
+  }
+
   void _setupBluetooth() {
     _isBluetoothConnected = AppBluetoothService.instance.isConnected;
     _btStateSubscription = AppBluetoothService.instance.deviceStateStream.listen((state) {
@@ -549,55 +564,285 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     );
   }
 
-  Future<void> _showLoadTemplateDialog() async {
-    try {
-      final db = await DatabaseHelper.instance.database;
-      final templates = await db.query('workout_templates', where: 'profile_name = ?', whereArgs: [_profileName]);
-      
-      if (mounted) {
-        showModalBottomSheet(
-          context: context,
-          builder: (context) => templates.isEmpty 
-            ? const Padding(padding: EdgeInsets.all(32), child: Text('No workouts saved for this profile.'))
-            : ListView.builder(
-            itemCount: templates.length,
-            itemBuilder: (context, index) {
-              final t = templates[index];
-              return ListTile(
-                leading: const Icon(Icons.timer),
-                title: Text(t['template_name'] as String),
-                subtitle: Text("${t['rounds']} rounds • ${t['work_time']}s / ${t['rest_time']}s"),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () async {
-                    await db.delete('workout_templates', where: 'id = ?', whereArgs: [t['id']]);
-                    if (context.mounted) {
-                      Navigator.pop(context); // Close the sheet to refresh
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Template deleted')));
-                    }
-                  },
-                ),
-                onTap: () {
-                  setState(() {
-                    _totalRounds = t['rounds'] as int;
-                    _workDuration = t['work_time'] as int;
-                    _restDuration = t['rest_time'] as int;
-                    _notesController.text = t['notes'] as String? ?? '';
-                    _continuousMode = (t['continuous_mode'] as int? ?? 0) == 1;
-                    _activityType = t['activity_type'] as String? ?? 'HIIT';
-                    _loadedTemplateName = t['template_name'] as String?;
-                  });
-                  if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                  Navigator.pop(context);
-                },
-              );
-            },
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Error loading templates: \$e');
+  String _getActivityName(String code) {
+    switch (code) {
+      case 'HIIT':
+        return 'HIIT / Interval';
+      case 'STRENGTH':
+        return 'Strength Training';
+      case 'FUNCTIONAL_STRENGTH':
+        return 'Functional Strength';
+      case 'CORE':
+        return 'Core Training';
+      case 'CARDIO':
+        return 'Mixed Cardio';
+      case 'YOGA':
+        return 'Yoga';
+      case 'PILATES':
+        return 'Pilates';
+      case 'CALISTHENICS':
+        return 'Calisthenics';
+      default:
+        return 'Other';
     }
+  }
+
+  Color _getActivityColor(String code) {
+    switch (code) {
+      case 'HIIT':
+        return const Color(0xFFBD93F9);
+      case 'STRENGTH':
+        return const Color(0xFF81A1C1);
+      case 'FUNCTIONAL_STRENGTH':
+        return const Color(0xFF88C0D0);
+      case 'CORE':
+        return const Color(0xFFD08770);
+      case 'CARDIO':
+        return const Color(0xFF0DF2A3);
+      case 'YOGA':
+        return const Color(0xFFB48EAD);
+      case 'PILATES':
+        return const Color(0xFFFF79C6);
+      case 'CALISTHENICS':
+        return const Color(0xFFEBCB8B);
+      default:
+        return const Color(0xFF4C566A);
+    }
+  }
+
+  String _formatDuration(int seconds) {
+    if (seconds >= 3600) {
+      final hours = seconds ~/ 3600;
+      final minutes = (seconds % 3600) ~/ 60;
+      return '${hours}h ${minutes}m';
+    }
+    final mins = seconds ~/ 60;
+    final secs = seconds % 60;
+    if (secs == 0) return '${mins}m';
+    return '${mins}m ${secs}s';
+  }
+
+  double _secondsToSliderValue(int seconds) {
+    if (seconds <= 300) {
+      final pct = (seconds - 10) / (300 - 10);
+      return pct * 0.5;
+    } else {
+      final pct = (seconds - 300) / (3600 - 300);
+      return 0.5 + pct * 0.5;
+    }
+  }
+
+  int _sliderValueToSeconds(double value) {
+    if (value <= 0.5) {
+      final pct = value / 0.5;
+      final seconds = 10 + (300 - 10) * pct;
+      return ((seconds / 5).round() * 5).clamp(10, 300);
+    } else {
+      final pct = (value - 0.5) / 0.5;
+      final seconds = 300 + (3600 - 300) * pct;
+      return ((seconds / 60).round() * 60).clamp(300, 3600);
+    }
+  }
+
+  int _decrementWorkDuration(int current) {
+    if (current <= 10) return 10;
+    if (current <= 300) {
+      return (current - 5).clamp(10, 3600);
+    } else {
+      final newDuration = ((current - 60) / 60).floor() * 60;
+      return newDuration.clamp(300, 3600);
+    }
+  }
+
+  int _incrementWorkDuration(int current) {
+    if (current >= 3600) return 3600;
+    if (current < 300) {
+      return (current + 5).clamp(10, 3600);
+    } else {
+      final newDuration = ((current + 60) / 60).floor() * 60;
+      return newDuration.clamp(300, 3600);
+    }
+  }
+
+  double _secondsToRestSliderValue(int seconds) {
+    if (seconds <= 120) {
+      final pct = seconds / 120.0;
+      return pct * 0.5;
+    } else {
+      final pct = (seconds - 120) / (900.0 - 120.0);
+      return 0.5 + pct * 0.5;
+    }
+  }
+
+  int _sliderValueToRestSeconds(double value) {
+    if (value <= 0.5) {
+      final pct = value / 0.5;
+      final seconds = 120.0 * pct;
+      return ((seconds / 5).round() * 5).clamp(0, 120);
+    } else {
+      final pct = (value - 0.5) / 0.5;
+      final seconds = 120.0 + (900.0 - 120.0) * pct;
+      return ((seconds / 30).round() * 30).clamp(120, 900);
+    }
+  }
+
+  int _decrementRestDuration(int current) {
+    if (current <= 0) return 0;
+    if (current <= 120) {
+      return (current - 5).clamp(0, 900);
+    } else {
+      final newDuration = ((current - 30) / 30).floor() * 30;
+      return newDuration.clamp(120, 900);
+    }
+  }
+
+  int _incrementRestDuration(int current) {
+    if (current >= 900) return 900;
+    if (current < 120) {
+      return (current + 5).clamp(0, 900);
+    } else {
+      final newDuration = ((current + 30) / 30).floor() * 30;
+      return newDuration.clamp(120, 900);
+    }
+  }
+
+
+
+  Widget _buildStatColumn(String label, String value, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 13, color: Colors.grey),
+            const SizedBox(width: 4),
+            Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoadedTemplateCard() {
+    final badgeColor = _getActivityColor(_activityType);
+    return Card(
+      color: Theme.of(context).colorScheme.surface,
+      margin: const EdgeInsets.all(16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15),
+        side: BorderSide(
+          color: badgeColor.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.star, color: Theme.of(context).colorScheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _loadedTemplateName!,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: badgeColor.withValues(alpha: 0.4), width: 1),
+                  ),
+                  child: Text(
+                    _getActivityName(_activityType),
+                    style: TextStyle(
+                      color: badgeColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _buildStatColumn('Rounds', _continuousMode ? 'Open Ended' : '$_totalRounds', Icons.loop),
+                const SizedBox(width: 24),
+                _buildStatColumn('Work', _formatDuration(_workDuration), Icons.timer),
+                const SizedBox(width: 24),
+                _buildStatColumn('Rest', _restDuration == 0 ? 'None' : _formatDuration(_restDuration), Icons.snooze),
+              ],
+            ),
+            if (_notesController.text.isNotEmpty) ...[
+              const Divider(height: 32),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.notes,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _notesController.text,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const Divider(height: 32),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _loadedTemplateName = null;
+                    });
+                  },
+                  icon: const Icon(Icons.close, size: 18),
+                  label: const Text('Unload / Custom Setup'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _showSaveTemplateDialog,
+                  icon: const Icon(Icons.copy, size: 18),
+                  label: const Text('Save As New'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildConfigPanel() {
@@ -609,85 +854,203 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         child: Column(
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton.icon(
-                  icon: const Icon(Icons.folder_open),
-                  label: const Text('Select Workout'),
-                  onPressed: _showLoadTemplateDialog,
-                ),
-                TextButton.icon(
                   icon: const Icon(Icons.save),
-                  label: const Text('Save'),
+                  label: const Text('Save Template'),
                   onPressed: _showSaveTemplateDialog,
                 ),
               ],
             ),
             const Divider(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // Work Duration Slider & Steppers
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Work (s)'),
-                Expanded(
-                  child: Slider(
-                    value: _workDuration.toDouble(),
-                    min: 10,
-                    max: 3600,
-                    divisions: 359,
-                    label: '$_workDuration s',
-                    onChanged: (val) {
-                      setState(() {
-                        _workDuration = val.toInt();
-                      });
-                      if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                    },
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Work Duration',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      Text(
+                        _formatDuration(_workDuration),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Text('$_workDuration'),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed: () {
+                        setState(() {
+                          _workDuration = _decrementWorkDuration(_workDuration);
+                        });
+                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
+                      },
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: _secondsToSliderValue(_workDuration),
+                        min: 0.0,
+                        max: 1.0,
+                        label: _formatDuration(_workDuration),
+                        onChanged: (val) {
+                          setState(() {
+                            _workDuration = _sliderValueToSeconds(val);
+                          });
+                          if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: () {
+                        setState(() {
+                          _workDuration = _incrementWorkDuration(_workDuration);
+                        });
+                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
+                      },
+                    ),
+                  ],
+                ),
               ],
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const SizedBox(height: 8),
+            // Rest Duration Slider & Steppers
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Rest (s)'),
-                Expanded(
-                  child: Slider(
-                    value: _restDuration.toDouble(),
-                    min: 0,
-                    max: 120,
-                    divisions: 24,
-                    label: '$_restDuration s',
-                    onChanged: (val) {
-                      setState(() {
-                        _restDuration = val.toInt();
-                      });
-                      if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                    },
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Rest Duration',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      Text(
+                        _restDuration == 0 ? 'None' : _formatDuration(_restDuration),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Text('$_restDuration'),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed: () {
+                        setState(() {
+                          _restDuration = _decrementRestDuration(_restDuration);
+                        });
+                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
+                      },
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: _secondsToRestSliderValue(_restDuration),
+                        min: 0.0,
+                        max: 1.0,
+                        label: _restDuration == 0 ? 'None' : _formatDuration(_restDuration),
+                        onChanged: (val) {
+                          setState(() {
+                            _restDuration = _sliderValueToRestSeconds(val);
+                          });
+                          if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: () {
+                        setState(() {
+                          _restDuration = _incrementRestDuration(_restDuration);
+                        });
+                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
+                      },
+                    ),
+                  ],
+                ),
               ],
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const SizedBox(height: 8),
+            // Rounds Slider & Steppers
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Rounds'),
-                Expanded(
-                  child: Slider(
-                    value: _totalRounds.toDouble(),
-                    min: 1,
-                    max: 50,
-                    divisions: 49,
-                    label: '$_totalRounds',
-                    onChanged: (val) {
-                      setState(() {
-                        _totalRounds = val.toInt();
-                      });
-                      if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                    },
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Rounds',
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      Text(
+                        '$_totalRounds',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Text('$_totalRounds'),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed: () {
+                        setState(() {
+                          _totalRounds = (_totalRounds - 1).clamp(1, 50);
+                        });
+                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
+                      },
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: _totalRounds.toDouble(),
+                        min: 1,
+                        max: 50,
+                        divisions: 49,
+                        label: '$_totalRounds',
+                        onChanged: (val) {
+                          setState(() {
+                            _totalRounds = val.toInt();
+                          });
+                          if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: () {
+                        setState(() {
+                          _totalRounds = (_totalRounds + 1).clamp(1, 50);
+                        });
+                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
+                      },
+                    ),
+                  ],
+                ),
               ],
             ),
             SwitchListTile(
@@ -722,13 +1085,13 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               title: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Continuous Workout'),
+                  const Text('Open Ended Workout'),
                   const SizedBox(width: 4),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => _showHelpDialog(
-                      'Continuous Workout',
-                      'Workout runs indefinitely, incrementing rounds continuously until you manually tap the Stop/End button.',
+                      'Open Ended Workout',
+                      'The workout will run indefinitely, incrementing rounds continuously until you manually tap the Stop/End button.',
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(4.0),
@@ -924,57 +1287,69 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     );
   }
 
-  Widget _buildProfileSelector(bool isIdle) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-          width: 1,
+  Widget _buildProfileSelectorAction(bool isEnabled) {
+    if (_availableProfiles.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Chip(
+          avatar: Icon(Icons.person, size: 14, color: Theme.of(context).colorScheme.primary),
+          label: Text(_profileName, style: const TextStyle(fontSize: 12)),
+          padding: EdgeInsets.zero,
         ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.person,
-            size: 20,
-            color: Theme.of(context).colorScheme.primary,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+      child: PopupMenuButton<String>(
+        enabled: isEnabled,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isEnabled
+                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)
+                  : Colors.grey.withValues(alpha: 0.3),
+            ),
+            color: Theme.of(context).colorScheme.surface,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _availableProfiles.isEmpty
-                ? Text(
-                    _profileName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  )
-                : DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _profileName,
-                      isExpanded: true,
-                      isDense: true,
-                      dropdownColor: Theme.of(context).colorScheme.surface,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
-                      items: _availableProfiles.map((p) {
-                        return DropdownMenuItem(value: p, child: Text(p));
-                      }).toList(),
-                      onChanged: isIdle
-                          ? (val) async {
-                              if (val != null) {
-                                await _onProfileChanged(val);
-                              }
-                            }
-                          : null,
-                    ),
-                  ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.person,
+                size: 14,
+                color: isEnabled ? Theme.of(context).colorScheme.primary : Colors.grey,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _profileName,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isEnabled ? Colors.white : Colors.grey,
+                ),
+              ),
+              Icon(
+                Icons.arrow_drop_down,
+                size: 14,
+                color: isEnabled ? Colors.white : Colors.grey,
+              ),
+            ],
           ),
-        ],
+        ),
+        onSelected: (val) async {
+          await _onProfileChanged(val);
+        },
+        itemBuilder: (context) {
+          return _availableProfiles.map((p) {
+            return PopupMenuItem<String>(
+              value: p,
+              child: Text(p),
+            );
+          }).toList();
+        },
       ),
     );
   }
@@ -988,6 +1363,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       appBar: AppBar(
         title: const Text('ChronoPulse Active'),
         actions: [
+          _buildProfileSelectorAction(isIdle),
           IconButton(
             icon: Icon(
               _isBluetoothConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
@@ -1001,18 +1377,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               }
             },
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Center(
-              child: Text(
-                '$_currentHr BPM',
-                style: TextStyle(
-                  color: _currentHr > 0 ? Theme.of(context).colorScheme.error : Colors.grey,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          )
         ],
       ),
       body: SingleChildScrollView(
@@ -1021,10 +1385,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 8),
-              _buildProfileSelector(isIdle),
               const SizedBox(height: 16),
-              if (_loadedTemplateName != null) ...[
+              if (_loadedTemplateName != null && !isIdle) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   decoration: BoxDecoration(
@@ -1075,7 +1437,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               const SizedBox(height: 24),
               _buildLiveHeartRateDisplay(),
               const SizedBox(height: 24),
-              if (isIdle) _buildConfigPanel(),
+              if (isIdle) (_loadedTemplateName != null ? _buildLoadedTemplateCard() : _buildConfigPanel()),
             ],
           ),
         ),

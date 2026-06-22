@@ -60,55 +60,66 @@ class HistoryScreenState extends State<HistoryScreen> {
     await _loadHistory();
   }
 
-  Widget _buildProfileSelector() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-          width: 1,
+  Widget _buildProfileSelectorAction() {
+    if (_availableProfiles.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: Chip(
+          avatar: Icon(Icons.person, size: 14, color: Theme.of(context).colorScheme.primary),
+          label: Text(_profileName, style: const TextStyle(fontSize: 12)),
+          padding: EdgeInsets.zero,
         ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.person,
-            size: 20,
-            color: Theme.of(context).colorScheme.primary,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+      child: PopupMenuButton<String>(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+            ),
+            color: Theme.of(context).colorScheme.surface,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _availableProfiles.isEmpty
-                ? Text(
-                    _profileName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  )
-                : DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _profileName,
-                      isExpanded: true,
-                      isDense: true,
-                      dropdownColor: Theme.of(context).colorScheme.surface,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
-                      items: _availableProfiles.map((p) {
-                        return DropdownMenuItem(value: p, child: Text(p));
-                      }).toList(),
-                      onChanged: (val) async {
-                        if (val != null) {
-                          await _onProfileChanged(val);
-                        }
-                      },
-                    ),
-                  ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.person,
+                size: 14,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _profileName,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const Icon(
+                Icons.arrow_drop_down,
+                size: 14,
+                color: Colors.white,
+              ),
+            ],
           ),
-        ],
+        ),
+        onSelected: (val) async {
+          await _onProfileChanged(val);
+        },
+        itemBuilder: (context) {
+          return _availableProfiles.map((p) {
+            return PopupMenuItem<String>(
+              value: p,
+              child: Text(p),
+            );
+          }).toList();
+        },
       ),
     );
   }
@@ -120,7 +131,7 @@ class HistoryScreenState extends State<HistoryScreen> {
       final dt = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
       final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
-    } catch (e) {
+    } catch (_) {
       return dateStr;
     }
   }
@@ -131,6 +142,7 @@ class HistoryScreenState extends State<HistoryScreen> {
       appBar: AppBar(
         title: const Text('Workout History'),
         actions: [
+          _buildProfileSelectorAction(),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadHistory,
@@ -139,7 +151,6 @@ class HistoryScreenState extends State<HistoryScreen> {
       ),
       body: Column(
         children: [
-          _buildProfileSelector(),
           Expanded(
             child: _isLoading 
               ? const Center(child: CircularProgressIndicator())

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'screens/timer_screen.dart';
+import 'screens/library_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/profile_screen.dart';
 import 'services/sync_service.dart';
@@ -85,7 +86,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   late PageController _pageController;
   final GlobalKey<TimerScreenState> _timerKey = GlobalKey<TimerScreenState>();
+  final GlobalKey<LibraryScreenState> _libraryKey = GlobalKey<LibraryScreenState>();
   final GlobalKey<HistoryScreenState> _historyKey = GlobalKey<HistoryScreenState>();
+  final GlobalKey<ProfileScreenState> _profileKey = GlobalKey<ProfileScreenState>();
+  Map<String, dynamic>? _pendingTemplate;
 
   @override
   void initState() {
@@ -113,23 +117,47 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           });
           if (index == 0) {
             _timerKey.currentState?.loadProfileSettings();
+            if (_pendingTemplate != null) {
+              _timerKey.currentState?.loadTemplate(_pendingTemplate!);
+              _pendingTemplate = null;
+            }
           } else if (index == 1) {
+            _libraryKey.currentState?.loadTemplates();
+          } else if (index == 2) {
             _historyKey.currentState?.refreshHistory();
             SyncService.instance.signInAndSync().then((success) {
-              if (success && mounted && _currentIndex == 1) {
+              if (success && mounted && _currentIndex == 2) {
                 _historyKey.currentState?.refreshHistory();
               }
             });
+          } else if (index == 3) {
+            _profileKey.currentState?.loadProfile();
           }
         },
         children: [
           TimerScreen(key: _timerKey),
+          LibraryScreen(
+            key: _libraryKey,
+            onWorkoutSelected: (template) {
+              _pendingTemplate = template;
+              if (_timerKey.currentState != null) {
+                _timerKey.currentState!.loadTemplate(template);
+                _pendingTemplate = null;
+              }
+              _pageController.animateToPage(
+                0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            },
+          ),
           HistoryScreen(key: _historyKey),
-          const ProfileScreen(),
+          ProfileScreen(key: _profileKey),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
+        type: BottomNavigationBarType.fixed,
         onTap: (index) {
           _pageController.animateToPage(
             index,
@@ -141,6 +169,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.timer),
             label: 'Timer',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.fitness_center),
+            label: 'Library',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart),

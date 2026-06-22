@@ -111,7 +111,7 @@ class SyncService extends ChangeNotifier {
         debugPrint('SyncService: Downloaded profile $name');
       } else {
         // Update local profile details from Firestore
-        await db.update('profiles', {
+        final updateData = <String, dynamic>{
           'max_hr': data['max_hr'],
           'max_prework_hr': data['max_prework_hr'],
           'sex': data['sex'],
@@ -119,8 +119,11 @@ class SyncService extends ChangeNotifier {
           'weight_kg': data['weight_kg'],
           'weight_unit_pref': data['weight_unit_pref'],
           'auto_connect_hr': data['auto_connect_hr'],
-          'save_history': data['save_history'] ?? 1,
-        }, where: 'name = ?', whereArgs: [name]);
+        };
+        if (data.containsKey('save_history')) {
+          updateData['save_history'] = data['save_history'] ?? 1;
+        }
+        await db.update('profiles', updateData, where: 'name = ?', whereArgs: [name]);
       }
     }
 
@@ -171,14 +174,21 @@ class SyncService extends ChangeNotifier {
         debugPrint('SyncService: Downloaded template $tName for profile $pName');
       } else {
         // Update local template settings from Firestore
-        await db.update('workout_templates', {
+        final updateMap = <String, dynamic>{
           'rounds': data['rounds'],
           'work_time': data['work_time'],
           'rest_time': data['rest_time'],
           'notes': data['notes'],
-          'continuous_mode': data['continuous_mode'] ?? 0,
-          'activity_type': data['activity_type'] ?? 'HIIT',
-        }, where: 'profile_name = ? AND template_name = ?', whereArgs: [pName, tName]);
+        };
+        if (data.containsKey('continuous_mode')) {
+          updateMap['continuous_mode'] = data['continuous_mode'] ?? 0;
+        }
+        if (data.containsKey('activity_type')) {
+          updateMap['activity_type'] = data['activity_type'] ?? 'HIIT';
+        }
+        await db.update('workout_templates', updateMap,
+            where: 'profile_name = ? AND template_name = ?',
+            whereArgs: [pName, tName]);
       }
     }
 

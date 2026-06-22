@@ -9,12 +9,20 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
 
+  @visibleForTesting
+  static String? activeProfileOverride;
+
   DatabaseHelper._init();
 
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('emom_timer.db');
     return _database!;
+  }
+
+  @visibleForTesting
+  void setDatabaseForTesting(Database db) {
+    _database = db;
   }
 
   Future<File> _getConfigFile() async {
@@ -45,6 +53,7 @@ class DatabaseHelper {
   }
 
   Future<String> getActiveProfileName() async {
+    if (activeProfileOverride != null) return activeProfileOverride!;
     final configFile = await _getConfigFile();
     
     if (await configFile.exists()) {
@@ -70,6 +79,10 @@ class DatabaseHelper {
   }
 
   Future<void> setActiveProfileName(String name) async {
+    if (activeProfileOverride != null) {
+      activeProfileOverride = name;
+      return;
+    }
     final configFile = await _getConfigFile();
     Map<String, dynamic> config = {};
     if (await configFile.exists()) {
