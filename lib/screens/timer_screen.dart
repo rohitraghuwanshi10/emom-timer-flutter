@@ -7,6 +7,7 @@ import '../services/audio_service.dart';
 import '../services/database_helper.dart';
 import '../services/sync_service.dart';
 import '../services/health_service.dart';
+import '../services/watch_connectivity_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -21,6 +22,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   WorkoutEngine? _engine;
   StreamSubscription? _workoutSubscription;
   StreamSubscription? _hrSubscription;
+  StreamSubscription? _watchSubscription;
   StreamSubscription? _btStateSubscription;
   late AnimationController _progressController;
 
@@ -154,6 +156,14 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       }
       _engine?.updateHeartRate(hr);
     });
+
+    WatchConnectivityService.instance.startListening();
+    _watchSubscription = WatchConnectivityService.instance.heartRateStream.listen((hr) {
+      if (mounted) {
+        setState(() => _currentHr = hr);
+      }
+      _engine?.updateHeartRate(hr);
+    });
   }
 
   void _startWorkout() {
@@ -265,6 +275,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     _progressController.dispose();
     _workoutSubscription?.cancel();
     _hrSubscription?.cancel();
+    _watchSubscription?.cancel();
+    WatchConnectivityService.instance.stopListening();
     _btStateSubscription?.cancel();
     _engine?.dispose();
     super.dispose();
