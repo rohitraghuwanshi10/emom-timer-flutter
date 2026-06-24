@@ -699,8 +699,8 @@
 		};
 		43596FAA2FEA2B680053F7B3 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 432DFAD42FE9FCF900DE1B0D /* WatchApp */;
-			targetProxy = 43596FA92FEA2B680053F7B3 /* PBXContainerItemProxy */;
+			target = 432DFAD92FE9FCF900DE1B0D /* WatchApp Watch App */;
+			targetProxy = 432DFAF42FE9FCFB00DE1B0D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
