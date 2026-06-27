@@ -343,8 +343,8 @@ class LibraryScreenState extends State<LibraryScreen> {
         
         await loadTemplates();
         
-        // Trigger Firestore sync
-        SyncService.instance.signInAndSync();
+        // Delete from Firestore
+        await SyncService.instance.deleteTemplateRemote(_profileName, name);
       } catch (e) {
         debugPrint('LibraryScreen: Error deleting template: $e');
       }
@@ -361,6 +361,7 @@ class LibraryScreenState extends State<LibraryScreen> {
     int restTime = isEditing ? template['rest_time'] as int : 10;
     bool continuous = isEditing ? (template['continuous_mode'] as int? ?? 0) == 1 : false;
     String activityType = isEditing ? template['activity_type'] as String? ?? 'HIIT' : 'HIIT';
+    bool autoRegulate = isEditing ? (template['auto_regulate'] as int? ?? 1) == 1 : true;
 
     showModalBottomSheet(
       context: context,
@@ -571,6 +572,18 @@ class LibraryScreenState extends State<LibraryScreen> {
                       },
                       contentPadding: EdgeInsets.zero,
                     ),
+                    // Auto Regulate Rest
+                    SwitchListTile(
+                      title: const Text('Auto Regulate Rest'),
+                      subtitle: const Text('Delay rounds based on heart rate threshold'),
+                      value: autoRegulate,
+                      onChanged: (val) {
+                        setModalState(() {
+                          autoRegulate = val;
+                        });
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: notesController,
@@ -612,6 +625,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                                 'notes': notesController.text,
                                 'continuous_mode': continuous ? 1 : 0,
                                 'activity_type': activityType,
+                                'auto_regulate': autoRegulate ? 1 : 0,
                               },
                               where: 'id = ?',
                               whereArgs: [template['id']],
@@ -633,6 +647,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                                 'notes': notesController.text,
                                 'continuous_mode': continuous ? 1 : 0,
                                 'activity_type': activityType,
+                                'auto_regulate': autoRegulate ? 1 : 0,
                               },
                               conflictAlgorithm: ConflictAlgorithm.replace,
                             );
@@ -798,6 +813,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                       final badgeColor = _getActivityColor(type);
 
                       return Card(
+                        key: ValueKey(t['id']),
                         color: Theme.of(context).colorScheme.surface,
                         margin: const EdgeInsets.only(bottom: 8),
                         shape: RoundedRectangleBorder(
@@ -848,6 +864,32 @@ class LibraryScreenState extends State<LibraryScreen> {
                                             ),
                                           ),
                                         ),
+                                        if ((t['auto_regulate'] as int? ?? 1) == 1) ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.redAccent.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3), width: 1),
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.favorite, size: 8, color: Colors.redAccent),
+                                                SizedBox(width: 2),
+                                                Text(
+                                                  'Auto HR',
+                                                  style: TextStyle(
+                                                    color: Colors.redAccent,
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                     const SizedBox(height: 4),

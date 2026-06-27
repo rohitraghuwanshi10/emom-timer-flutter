@@ -436,5 +436,65 @@ void main() {
 
       await dbV6.close();
     });
+
+    test('Create DB version 7 contains auto_regulate in workout_templates', () async {
+      final db = await openDatabase(
+        dbPath,
+        version: 7,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workout_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_name TEXT,
+                auto_regulate INTEGER DEFAULT 1
+            )
+          ''');
+        },
+      );
+
+      await db.insert('workout_templates', {
+        'template_name': 'Test Workout',
+        'auto_regulate': 0,
+      });
+
+      final templates = await db.query('workout_templates');
+      expect(templates.length, equals(1));
+      expect(templates.first['auto_regulate'], equals(0));
+
+      await db.close();
+    });
+
+    test('Migration from version 6 to 7 adds auto_regulate to workout_templates', () async {
+      final db = await openDatabase(
+        dbPath,
+        version: 6,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workout_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_name TEXT
+            )
+          ''');
+        },
+      );
+
+      await db.insert('workout_templates', {'template_name': 'Legacy Workout'});
+      await db.close();
+
+      final dbV7 = await openDatabase(
+        dbPath,
+        version: 7,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 7) {
+            await db.execute('ALTER TABLE workout_templates ADD COLUMN auto_regulate INTEGER DEFAULT 1');
+          }
+        },
+      );
+
+      final templates = await dbV7.query('workout_templates');
+      expect(templates.first['auto_regulate'], equals(1)); // defaults to 1
+
+      await dbV7.close();
+    });
   });
 }

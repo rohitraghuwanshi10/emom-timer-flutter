@@ -55,12 +55,17 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
   bool get _isTemplateModified {
     if (_loadedTemplate == null) return false;
+    final templateAutoRegulate = (_loadedTemplate!['auto_regulate'] as int? ?? 1) == 1;
+    final autoRegulateModified = _isBluetoothConnected
+        ? _autoRegulationEnabled != templateAutoRegulate
+        : false;
     return _totalRounds != _loadedTemplate!['rounds'] ||
         _workDuration != _loadedTemplate!['work_time'] ||
         _restDuration != _loadedTemplate!['rest_time'] ||
         _notesController.text != (_loadedTemplate!['notes'] ?? '') ||
         _continuousMode != ((_loadedTemplate!['continuous_mode'] as int? ?? 0) == 1) ||
-        _activityType != (_loadedTemplate!['activity_type'] ?? 'HIIT');
+        _activityType != (_loadedTemplate!['activity_type'] ?? 'HIIT') ||
+        autoRegulateModified;
   }
   
   // Cache variables for calorie/zone calculations
@@ -108,7 +113,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
             
             // Auto-check if Bluetooth is connected and maxPreworkHr is configured
             if (_isBluetoothConnected) {
-              _autoRegulationEnabled = _maxPreworkHr > 0;
+              final templateAutoRegulate = _loadedTemplate == null || (_loadedTemplate!['auto_regulate'] as int? ?? 1) == 1;
+              _autoRegulationEnabled = templateAutoRegulate && _maxPreworkHr > 0;
             } else {
               _autoRegulationEnabled = false;
             }
@@ -142,6 +148,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         _activityType = template['activity_type'] as String? ?? 'HIIT';
         _loadedTemplateName = template['template_name'] as String?;
         _loadedTemplate = template;
+        _autoRegulationEnabled = (template['auto_regulate'] as int? ?? 1) == 1 && _isBluetoothConnected && _maxPreworkHr > 0;
       });
       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
     }
@@ -154,7 +161,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         setState(() {
           _isBluetoothConnected = state == BluetoothConnectionState.connected;
           if (_isBluetoothConnected) {
-            _autoRegulationEnabled = _maxPreworkHr > 0;
+            final templateAutoRegulate = _loadedTemplate == null || (_loadedTemplate!['auto_regulate'] as int? ?? 1) == 1;
+            _autoRegulationEnabled = templateAutoRegulate && _maxPreworkHr > 0;
           } else {
             _autoRegulationEnabled = false;
           }
@@ -566,6 +574,11 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               if (controller.text.isNotEmpty) {
                 try {
                   final db = await DatabaseHelper.instance.database;
+                  final wasTemplateAutoRegulated = _loadedTemplate != null && (_loadedTemplate!['auto_regulate'] as int? ?? 1) == 1;
+                  final autoRegulateToSave = _isBluetoothConnected
+                      ? (_autoRegulationEnabled ? 1 : 0)
+                      : (wasTemplateAutoRegulated || _loadedTemplate == null ? 1 : 0);
+
                   await db.insert('workout_templates', {
                     'profile_name': _profileName,
                     'template_name': controller.text,
@@ -575,6 +588,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     'notes': _notesController.text,
                     'continuous_mode': _continuousMode ? 1 : 0,
                     'activity_type': _activityType,
+                    'auto_regulate': autoRegulateToSave,
                   }, conflictAlgorithm: ConflictAlgorithm.replace);
                   if (context.mounted) {
                     Navigator.pop(context);
@@ -829,6 +843,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                   setState(() {
                     _loadedTemplateName = null;
                     _loadedTemplate = null;
+                    _autoRegulationEnabled = _isBluetoothConnected && _maxPreworkHr > 0;
                   });
                 },
                 icon: const Icon(Icons.close, size: 14),

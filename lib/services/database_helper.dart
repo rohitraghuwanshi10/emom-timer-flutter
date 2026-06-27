@@ -112,7 +112,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 6,
+        version: 7,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -155,6 +155,13 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for profiles save_history: $e');
             }
           }
+          if (oldVersion < 7) {
+            try {
+              await db.execute('ALTER TABLE workout_templates ADD COLUMN auto_regulate INTEGER DEFAULT 1');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for workout_templates auto_regulate: $e');
+            }
+          }
         },
       ),
     );
@@ -188,6 +195,7 @@ class DatabaseHelper {
           notes TEXT,
           continuous_mode INTEGER DEFAULT 0,
           activity_type TEXT DEFAULT 'HIIT',
+          auto_regulate INTEGER DEFAULT 1,
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE,
           UNIQUE(profile_name, template_name)
       )

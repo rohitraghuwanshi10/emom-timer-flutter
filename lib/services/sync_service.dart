@@ -17,6 +17,19 @@ class SyncService extends ChangeNotifier {
 
   SyncService._init();
 
+  Future<void> deleteTemplateRemote(String profileName, String templateName) async {
+    try {
+      if (_auth.currentUser == null) {
+        await _auth.signInAnonymously();
+      }
+      final docId = '${profileName}_$templateName';
+      await _firestore.collection('templates').doc(docId).delete();
+      debugPrint('SyncService: Deleted template $docId from Firestore.');
+    } catch (e) {
+      debugPrint('SyncService: Error deleting template $templateName from Firestore: $e');
+    }
+  }
+
   Future<bool> signInAndSync() async {
     if (_isSyncing) {
       _lastError = "Sync already in progress (Status: $_syncStatus).";
@@ -149,6 +162,7 @@ class SyncService extends ChangeNotifier {
         'notes': local['notes'],
         'continuous_mode': local['continuous_mode'] ?? 0,
         'activity_type': local['activity_type'] ?? 'HIIT',
+        'auto_regulate': local['auto_regulate'] ?? 1,
       }, SetOptions(merge: true));
     }
 
@@ -170,6 +184,7 @@ class SyncService extends ChangeNotifier {
           'notes': data['notes'],
           'continuous_mode': data['continuous_mode'] ?? 0,
           'activity_type': data['activity_type'] ?? 'HIIT',
+          'auto_regulate': data['auto_regulate'] ?? 1,
         });
         debugPrint('SyncService: Downloaded template $tName for profile $pName');
       } else {
@@ -185,6 +200,9 @@ class SyncService extends ChangeNotifier {
         }
         if (data.containsKey('activity_type')) {
           updateMap['activity_type'] = data['activity_type'] ?? 'HIIT';
+        }
+        if (data.containsKey('auto_regulate')) {
+          updateMap['auto_regulate'] = data['auto_regulate'] ?? 1;
         }
         await db.update('workout_templates', updateMap,
             where: 'profile_name = ? AND template_name = ?',
