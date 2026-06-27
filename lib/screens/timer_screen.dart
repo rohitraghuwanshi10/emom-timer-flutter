@@ -50,7 +50,18 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   bool _continuousMode = false;
   final TextEditingController _notesController = TextEditingController();
   String? _loadedTemplateName;
+  Map<String, dynamic>? _loadedTemplate;
   String _activityType = 'HIIT';
+
+  bool get _isTemplateModified {
+    if (_loadedTemplate == null) return false;
+    return _totalRounds != _loadedTemplate!['rounds'] ||
+        _workDuration != _loadedTemplate!['work_time'] ||
+        _restDuration != _loadedTemplate!['rest_time'] ||
+        _notesController.text != (_loadedTemplate!['notes'] ?? '') ||
+        _continuousMode != ((_loadedTemplate!['continuous_mode'] as int? ?? 0) == 1) ||
+        _activityType != (_loadedTemplate!['activity_type'] ?? 'HIIT');
+  }
   
   // Cache variables for calorie/zone calculations
   int _maxHr = 180;
@@ -130,6 +141,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         _continuousMode = (template['continuous_mode'] as int? ?? 0) == 1;
         _activityType = template['activity_type'] as String? ?? 'HIIT';
         _loadedTemplateName = template['template_name'] as String?;
+        _loadedTemplate = template;
       });
       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
     }
@@ -472,9 +484,13 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
       final notes = _notesController.text;
       
+      final workoutName = _loadedTemplateName != null
+          ? (_isTemplateModified ? '$_loadedTemplateName (Modified)' : _loadedTemplateName)
+          : null;
+
       final workoutId = await DatabaseHelper.instance.saveWorkout(
         profileName: _profileName,
-        workoutName: _loadedTemplateName,
+        workoutName: workoutName,
         startTime: _workoutStartTime!.toIso8601String().substring(0, 19),
         endTime: endTime.toIso8601String().substring(0, 19),
         totalRoundsCompleted: completedRounds,
@@ -497,7 +513,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           start: _workoutStartTime!,
           end: endTime,
           totalCalories: caloriesBurnt.round(),
-          title: _loadedTemplateName ?? 'EMOM Workout',
+          title: workoutName ?? 'EMOM Workout',
           heartRateData: _hrDetails,
           activityTypeStr: _activityType,
         );
@@ -743,116 +759,111 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     );
   }
 
-  Widget _buildLoadedTemplateCard() {
-    final badgeColor = _getActivityColor(_activityType);
-    return Card(
-      color: Theme.of(context).colorScheme.surface,
-      margin: const EdgeInsets.all(16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
-        side: BorderSide(
-          color: badgeColor.withValues(alpha: 0.3),
-          width: 1.5,
+
+
+  Widget _buildTemplateHeader() {
+    if (_loadedTemplateName == null) return const SizedBox.shrink();
+    
+    final isModified = _isTemplateModified;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+          width: 1,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.star, color: Theme.of(context).colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _loadedTemplateName!,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.star, color: Theme.of(context).colorScheme.primary, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _loadedTemplateName!,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: badgeColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: badgeColor.withValues(alpha: 0.4), width: 1),
-                  ),
-                  child: Text(
-                    _getActivityName(_activityType),
-                    style: TextStyle(
-                      color: badgeColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                _buildStatColumn('Rounds', _continuousMode ? 'Open Ended' : '$_totalRounds', Icons.loop),
-                const SizedBox(width: 24),
-                _buildStatColumn('Work', _formatDuration(_workDuration), Icons.timer),
-                const SizedBox(width: 24),
-                _buildStatColumn('Rest', _restDuration == 0 ? 'None' : _formatDuration(_restDuration), Icons.snooze),
-              ],
-            ),
-            if (_notesController.text.isNotEmpty) ...[
-              const Divider(height: 32),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.notes,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _notesController.text,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontStyle: FontStyle.italic,
-                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ),
-                ],
               ),
-            ],
-            const Divider(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _loadedTemplateName = null;
-                    });
-                  },
-                  icon: const Icon(Icons.close, size: 18),
-                  label: const Text('Unload / Custom Setup'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              if (isModified)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.edit, size: 10, color: Colors.orange),
+                      SizedBox(width: 4),
+                      Text(
+                        'Modified',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: _showSaveTemplateDialog,
-                  icon: const Icon(Icons.copy, size: 18),
-                  label: const Text('Save As New'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.primary,
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _loadedTemplateName = null;
+                    _loadedTemplate = null;
+                  });
+                },
+                icon: const Icon(Icons.close, size: 14),
+                label: const Text('Unload', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                  side: BorderSide(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              if (isModified) ...[
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    if (_loadedTemplate != null) {
+                      loadTemplate(_loadedTemplate!);
+                    }
+                  },
+                  icon: const Icon(Icons.undo, size: 14),
+                  label: const Text('Reset', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange.withValues(alpha: 0.2),
+                    foregroundColor: Colors.orange,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
               ],
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -865,6 +876,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            if (_loadedTemplateName != null) ...[
+              _buildTemplateHeader(),
+              const Divider(),
+            ],
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -1418,28 +1433,13 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        _loadedTemplateName!,
+                        _loadedTemplateName! + (_isTemplateModified ? ' (Modified)' : ''),
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
-                      if (isIdle) ...[
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _loadedTemplateName = null;
-                            });
-                          },
-                          child: const Icon(
-                            Icons.cancel_outlined,
-                            size: 16,
-                            color: Colors.redAccent,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -1449,7 +1449,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               const SizedBox(height: 24),
               _buildLiveHeartRateDisplay(),
               const SizedBox(height: 24),
-              if (isIdle) (_loadedTemplateName != null ? _buildLoadedTemplateCard() : _buildConfigPanel()),
+              if (isIdle) _buildConfigPanel(),
             ],
           ),
         ),
