@@ -96,6 +96,7 @@ class SyncService extends ChangeNotifier {
         'birth_date': local['birth_date'],
         'weight_kg': local['weight_kg'],
         'weight_unit_pref': local['weight_unit_pref'],
+        'distance_unit_pref': local['distance_unit_pref'] ?? 'km',
         'auto_connect_hr': local['auto_connect_hr'],
         'save_history': local['save_history'] ?? 1,
         'treadmill_enabled': local['treadmill_enabled'] ?? 0,
@@ -122,6 +123,7 @@ class SyncService extends ChangeNotifier {
           'birth_date': data['birth_date'],
           'weight_kg': data['weight_kg'],
           'weight_unit_pref': data['weight_unit_pref'],
+          'distance_unit_pref': data['distance_unit_pref'] ?? 'km',
           'auto_connect_hr': data['auto_connect_hr'],
           'save_history': data['save_history'] ?? 1,
           'treadmill_enabled': data['treadmill_enabled'] ?? 0,
@@ -141,6 +143,9 @@ class SyncService extends ChangeNotifier {
           'weight_unit_pref': data['weight_unit_pref'],
           'auto_connect_hr': data['auto_connect_hr'],
         };
+        if (data.containsKey('distance_unit_pref')) {
+          updateData['distance_unit_pref'] = data['distance_unit_pref'] ?? 'km';
+        }
         if (data.containsKey('save_history')) {
           updateData['save_history'] = data['save_history'] ?? 1;
         }

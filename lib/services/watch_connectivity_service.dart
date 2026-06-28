@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/services.dart';
 
 class WatchConnectivityService {
@@ -14,6 +15,9 @@ class WatchConnectivityService {
   StreamSubscription? _subscription;
 
   void startListening() {
+    if (!Platform.isIOS && !Platform.isAndroid) {
+      return;
+    }
     _subscription?.cancel();
     _subscription = _watchEventChannel.receiveBroadcastStream().listen(
       (dynamic bpm) {
