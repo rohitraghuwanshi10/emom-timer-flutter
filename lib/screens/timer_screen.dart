@@ -92,6 +92,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   String? _sex;
   double _weightKg = 70.0;
   bool _healthEnabled = false;
+  String _distanceUnitPref = 'km';
 
   // Session data
   List<Map<String, dynamic>> _hrDetails = [];
@@ -133,6 +134,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
             _weightKg = profile['weight_kg'] as double? ?? 70.0;
             _healthEnabled = (profile['health_enabled'] as int? ?? 0) == 1;
             _saveHistoryEnabled = (profile['save_history'] as int? ?? 1) == 1;
+            _distanceUnitPref = profile['distance_unit_pref'] as String? ?? 'km';
             
             TreadmillBluetoothService.instance.treadmillEnabled = (profile['treadmill_enabled'] as int? ?? 0) == 1;
             final p1 = (profile['treadmill_preset_1'] as num?)?.toDouble() ?? 2.0;
@@ -182,6 +184,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         if (_treadmillWorkout) {
           TreadmillBluetoothService.instance.workSpeed = (template['work_speed'] as num?)?.toDouble() ?? 4.0;
           TreadmillBluetoothService.instance.restSpeed = (template['rest_speed'] as num?)?.toDouble() ?? 0.0;
+          TreadmillBluetoothService.instance.autoSpeedSync = true;
         }
       });
       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
@@ -345,6 +348,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         AudioService.instance.playRestChime();
       } else if (event.timeRemaining == 10 && event.state == WorkoutState.PREP) {
         AudioService.instance.playWorkChime(); // Play 'Work' sound for PREP
+      } else if ((event.state == WorkoutState.PREP || event.state == WorkoutState.REST) &&
+          (event.timeRemaining == 3 || event.timeRemaining == 2 || event.timeRemaining == 1)) {
+        AudioService.instance.playTick();
       }
 
       // Animation orchestration
@@ -889,7 +895,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
 
 
-  Widget _buildStatColumn(String label, String value, IconData icon) {
+  Widget _buildStatColumn(String label, String value, IconData icon, {Color? valueColor}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -903,9 +909,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         const SizedBox(height: 2),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.bold,
+            color: valueColor,
           ),
         ),
       ],
@@ -977,12 +984,13 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              OutlinedButton.icon(
+               OutlinedButton.icon(
                 onPressed: () {
                   setState(() {
                     _loadedTemplateName = null;
                     _loadedTemplate = null;
                     _treadmillWorkout = false;
+                    TreadmillBluetoothService.instance.autoSpeedSync = false;
                     _autoRegulationEnabled = _isBluetoothConnected && _maxPreworkHr > 0;
                   });
                 },
@@ -1023,445 +1031,174 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     );
   }
 
-  Widget _buildConfigPanel() {
+  Widget _buildWorkoutSummaryCard() {
+    final isTreadmill = TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout;
     return Card(
       color: Theme.of(context).colorScheme.surface,
       margin: const EdgeInsets.all(16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (_loadedTemplateName != null) ...[
               _buildTemplateHeader(),
-              const Divider(),
+              const SizedBox(height: 12),
             ],
+            // A clean 2x2 grid of key stats
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton.icon(
-                  icon: const Icon(Icons.save),
-                  label: const Text('Save Template'),
-                  onPressed: _showSaveTemplateDialog,
-                ),
-              ],
-            ),
-            const Divider(),
-            // Work Duration Slider & Steppers
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Work Duration',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                      ),
-                      Text(
-                        _formatDuration(_workDuration),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
+                Expanded(
+                  child: _buildStatColumn(
+                    'Work Duration',
+                    _formatDuration(_workDuration),
+                    Icons.timer,
+                    valueColor: Theme.of(context).colorScheme.primary,
                   ),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: () {
-                        setState(() {
-                          _workDuration = _decrementWorkDuration(_workDuration);
-                        });
-                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                      },
-                    ),
-                    Expanded(
-                      child: Slider(
-                        value: _secondsToSliderValue(_workDuration),
-                        min: 0.0,
-                        max: 1.0,
-                        label: _formatDuration(_workDuration),
-                        onChanged: (val) {
-                          setState(() {
-                            _workDuration = _sliderValueToSeconds(val);
-                          });
-                          if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                        },
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline),
-                      onPressed: () {
-                        setState(() {
-                          _workDuration = _incrementWorkDuration(_workDuration);
-                        });
-                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // Rest Duration Slider & Steppers
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Rest Duration',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                      ),
-                      Text(
-                        _restDuration == 0 ? 'None' : _formatDuration(_restDuration),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
+                Expanded(
+                  child: _buildStatColumn(
+                    'Rest Duration',
+                    _restDuration == 0 ? 'None' : _formatDuration(_restDuration),
+                    Icons.coffee,
+                    valueColor: Theme.of(context).colorScheme.secondary,
                   ),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: () {
-                        setState(() {
-                          _restDuration = _decrementRestDuration(_restDuration);
-                        });
-                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                      },
-                    ),
-                    Expanded(
-                      child: Slider(
-                        value: _secondsToRestSliderValue(_restDuration),
-                        min: 0.0,
-                        max: 1.0,
-                        label: _restDuration == 0 ? 'None' : _formatDuration(_restDuration),
-                        onChanged: (val) {
-                          setState(() {
-                            _restDuration = _sliderValueToRestSeconds(val);
-                          });
-                          if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                        },
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline),
-                      onPressed: () {
-                        setState(() {
-                          _restDuration = _incrementRestDuration(_restDuration);
-                        });
-                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                      },
-                    ),
-                  ],
-                ),
               ],
             ),
-            const SizedBox(height: 8),
-            // Rounds Slider & Steppers
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            const SizedBox(height: 16),
+            Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Rounds',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                      ),
-                      Text(
-                        '$_totalRounds',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
+                Expanded(
+                  child: _buildStatColumn(
+                    'Rounds',
+                    _continuousMode ? 'Open Ended' : '$_totalRounds',
+                    Icons.repeat,
                   ),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: () {
-                        setState(() {
-                          _totalRounds = (_totalRounds - 1).clamp(1, 50);
-                        });
-                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                      },
-                    ),
-                    Expanded(
-                      child: Slider(
-                        value: _totalRounds.toDouble(),
-                        min: 1,
-                        max: 50,
-                        divisions: 49,
-                        label: '$_totalRounds',
-                        onChanged: (val) {
-                          setState(() {
-                            _totalRounds = val.toInt();
-                          });
-                          if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                        },
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline),
-                      onPressed: () {
-                        setState(() {
-                          _totalRounds = (_totalRounds + 1).clamp(1, 50);
-                        });
-                        if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
-                      },
-                    ),
-                  ],
+                Expanded(
+                  child: _buildStatColumn(
+                    'Activity Type',
+                    _getActivityName(_activityType),
+                    Icons.fitness_center,
+                    valueColor: _getActivityColor(_activityType),
+                  ),
                 ),
               ],
             ),
-            SwitchListTile(
-              title: Row(
-                mainAxisSize: MainAxisSize.min,
+            if (_autoRegulationEnabled) ...[
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 8),
+              Row(
                 children: [
-                  const Text('Auto Regulate Rest'),
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _showHelpDialog(
-                      'Auto Regulate Rest',
-                      'Hold the rest phase countdown until your heart rate drops below your profile\'s configured threshold (currently $_maxPreworkHr BPM). Requires a connected heart rate monitor.',
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4.0),
-                      child: Icon(
-                        Icons.help_outline,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-                      ),
+                  Icon(Icons.favorite_border, size: 14, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Auto-regulated Rest (< $_maxPreworkHr BPM)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
-              value: _autoRegulationEnabled,
-              onChanged: _isBluetoothConnected
-                  ? (val) => setState(() => _autoRegulationEnabled = val)
-                  : null,
-            ),
-            SwitchListTile(
-              title: Row(
-                mainAxisSize: MainAxisSize.min,
+            ],
+            if (isTreadmill) ...[
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 8),
+              Row(
                 children: [
-                  const Text('Open Ended Workout'),
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _showHelpDialog(
-                      'Open Ended Workout',
-                      'The workout will run indefinitely, incrementing rounds continuously until you manually tap the Stop/End button.',
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4.0),
-                      child: Icon(
-                        Icons.help_outline,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              value: _continuousMode,
-              onChanged: (val) => setState(() => _continuousMode = val),
-            ),
+                  Icon(Icons.directions_run, size: 14, color: Theme.of(context).colorScheme.secondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final bool isMetric = _distanceUnitPref == 'km';
+                        final double displayWorkSpeed = isMetric 
+                            ? TreadmillBluetoothService.instance.workSpeed 
+                            : TreadmillBluetoothService.instance.workSpeed * 0.621371;
+                        final double displayRestSpeed = isMetric 
+                            ? TreadmillBluetoothService.instance.restSpeed 
+                            : TreadmillBluetoothService.instance.restSpeed * 0.621371;
+                        final String speedUnit = isMetric ? 'km/h' : 'mph';
 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Activity Type'),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _showHelpDialog(
-                        'Activity Type',
-                        'Select the exercise category. This value is used to categorize the workout when saving it to Apple Health.',
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Icon(
-                          Icons.help_outline,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                DropdownButton<String>(
-                  value: _activityType,
-                  items: const [
-                    DropdownMenuItem(value: 'HIIT', child: Text('HIIT / Interval')),
-                    DropdownMenuItem(value: 'STRENGTH', child: Text('Strength Training')),
-                    DropdownMenuItem(value: 'FUNCTIONAL_STRENGTH', child: Text('Functional Strength')),
-                    DropdownMenuItem(value: 'CORE', child: Text('Core Training')),
-                    DropdownMenuItem(value: 'CARDIO', child: Text('Mixed Cardio')),
-                    DropdownMenuItem(value: 'YOGA', child: Text('Yoga')),
-                    DropdownMenuItem(value: 'PILATES', child: Text('Pilates')),
-                    DropdownMenuItem(value: 'CALISTHENICS', child: Text('Calisthenics')),
-                    DropdownMenuItem(value: 'OTHER', child: Text('Other')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _activityType = val;
-                      });
-                    }
-                  },
-                ),
-              ],
-            ),
-            if (TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout) ...[
-              // WalkingPad Treadmill Configurations
-              const Divider(),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-                  child: Text(
-                    'WalkingPad Treadmill',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey),
-                  ),
-                ),
-              ),
-              SwitchListTile(
-                title: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Auto Speed Sync'),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _showHelpDialog(
-                        'Auto Speed Sync',
-                        'Automatically controls the treadmill speed based on your workout interval. On WORK, it starts the belt and ramps up to Work Speed. On REST, it slows down to Rest Speed (or stops the belt). On PAUSE/END, it stops the belt.',
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Icon(
-                          Icons.help_outline,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                subtitle: Text(
-                  _treadmillConnectionState == BluetoothConnectionState.connected
-                      ? 'Connected and ready'
-                      : 'Treadmill not connected (auto-sync will activate upon connection)',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                value: TreadmillBluetoothService.instance.autoSpeedSync,
-                onChanged: (val) => setState(() {
-                      TreadmillBluetoothService.instance.autoSpeedSync = val;
-                    }),
-              ),
-              if (TreadmillBluetoothService.instance.autoSpeedSync) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Column(
-                    children: [
-                      // Work Speed Slider
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Work Phase Speed'),
-                          Text(
-                            '${TreadmillBluetoothService.instance.workSpeed.toStringAsFixed(1)} km/h',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        return Text(
+                          TreadmillBluetoothService.instance.autoSpeedSync
+                              ? 'Treadmill speed sync: Work ${displayWorkSpeed.toStringAsFixed(1)} $speedUnit | Rest ${displayRestSpeed.toStringAsFixed(1)} $speedUnit'
+                              : 'Treadmill integration active (Auto Speed Sync: OFF)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.secondary,
+                            fontWeight: FontWeight.w500,
                           ),
-                        ],
-                      ),
-                      Slider(
-                        value: TreadmillBluetoothService.instance.workSpeed,
-                        min: 0.5,
-                        max: 10.0,
-                        divisions: 95, // 0.5 to 10.0 is 9.5 units, so 95 steps of 0.1
-                        label: '${TreadmillBluetoothService.instance.workSpeed.toStringAsFixed(1)} km/h',
-                        onChanged: (val) => setState(() {
-                          TreadmillBluetoothService.instance.workSpeed = val;
-                        }),
-                      ),
-                      const SizedBox(height: 8),
-                      // Rest Speed Slider
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Rest Phase Speed'),
-                          Text(
-                            TreadmillBluetoothService.instance.restSpeed == 0.0
-                                ? 'Stop (0.0 km/h)'
-                                : '${TreadmillBluetoothService.instance.restSpeed.toStringAsFixed(1)} km/h',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.secondary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Slider(
-                        value: TreadmillBluetoothService.instance.restSpeed,
-                        min: 0.0,
-                        max: 10.0,
-                        divisions: 100, // 0.0 to 10.0 is 10.0 units, so 100 steps of 0.1
-                        label: TreadmillBluetoothService.instance.restSpeed == 0.0
-                            ? 'Stop'
-                            : '${TreadmillBluetoothService.instance.restSpeed.toStringAsFixed(1)} km/h',
-                        onChanged: (val) => setState(() {
-                          TreadmillBluetoothService.instance.restSpeed = val;
-                        }),
-                      ),
-                    ],
+                        );
+                      }
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ],
-            const SizedBox(height: 8),
-            TextField(
-              controller: _notesController,
-              decoration: const InputDecoration(
-                labelText: 'Workout Notes',
-                hintText: 'Enter notes for this workout...',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.note),
+            if (_notesController.text.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.note_alt_outlined, size: 14, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _notesController.text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+                ],
               ),
-              maxLines: 2,
+            ],
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _showCustomizeWorkoutSheet,
+              icon: const Icon(Icons.tune, size: 18),
+              label: const Text('Customize Workout'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                elevation: 0,
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showCustomizeWorkoutSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return _CustomizeWorkoutSheet(timerState: this);
+      },
     );
   }
 
@@ -1650,6 +1387,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   Widget build(BuildContext context) {
     bool isIdle = _currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED;
     final bool isNarrow = MediaQuery.of(context).size.width < 600;
+    final bool showTreadmillStop = !isIdle &&
+        TreadmillBluetoothService.instance.treadmillEnabled &&
+        _treadmillWorkout &&
+        _treadmillConnectionState == BluetoothConnectionState.connected;
 
     return Scaffold(
       appBar: AppBar(
@@ -1714,7 +1455,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               const SizedBox(height: 24),
               _buildLiveTreadmillTelemetry(),
               const SizedBox(height: 24),
-              if (isIdle) _buildConfigPanel(),
+              if (isIdle) _buildWorkoutSummaryCard(),
             ],
           ),
         ),
@@ -1756,6 +1497,29 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                         icon: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
                         label: Text(_currentEvent.state == WorkoutState.PAUSED ? 'Resume' : 'Pause'),
                       ),
+                if (showTreadmillStop) ...[
+                  const SizedBox(width: 16),
+                  isNarrow
+                      ? FloatingActionButton(
+                          heroTag: 'tm_stop_btn',
+                          onPressed: () {
+                            TreadmillBluetoothService.instance.stop();
+                            _engine?.pause();
+                          },
+                          backgroundColor: Colors.red,
+                          child: const Icon(Icons.pan_tool, color: Colors.white),
+                        )
+                      : FloatingActionButton.extended(
+                          heroTag: 'tm_stop_btn',
+                          onPressed: () {
+                            TreadmillBluetoothService.instance.stop();
+                            _engine?.pause();
+                          },
+                          backgroundColor: Colors.red,
+                          icon: const Icon(Icons.pan_tool, color: Colors.white),
+                          label: const Text('STOP TREADMILL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                ],
                 const SizedBox(width: 16),
                 isNarrow
                     ? FloatingActionButton(
@@ -1793,10 +1557,14 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     if (!isEnabled || !isConnected || !_treadmillWorkout) return const SizedBox.shrink();
 
     final status = _treadmillStatus;
-    final speed = status?.speed ?? 0.0;
-    final dist = status?.distance ?? 0.0;
+    final double rawSpeed = status?.speed ?? 0.0;
+    final double rawDist = status?.distance ?? 0.0;
     final time = status?.time ?? 0;
     final steps = status?.steps ?? 0;
+
+    final bool isMetric = _distanceUnitPref == 'km';
+    final double displaySpeed = isMetric ? rawSpeed : rawSpeed * 0.621371;
+    final double displayDist = isMetric ? rawDist : rawDist * 0.621371;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -1833,12 +1601,12 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                 children: [
                   _buildTelemetryItem(
                     label: 'Speed',
-                    value: '${speed.toStringAsFixed(1)} km/h',
+                    value: '${displaySpeed.toStringAsFixed(1)} ${isMetric ? "km/h" : "mph"}',
                     icon: Icons.speed,
                   ),
                   _buildTelemetryItem(
                     label: 'Distance',
-                    value: '${dist.toStringAsFixed(2)} km',
+                    value: '${displayDist.toStringAsFixed(2)} ${isMetric ? "km" : "mi"}',
                     icon: Icons.map,
                   ),
                   _buildTelemetryItem(
@@ -1905,10 +1673,27 @@ class _BluetoothDeviceManagerSheetState extends State<BluetoothDeviceManagerShee
   TreadmillStatus? _treadmillStatus;
   bool _isTreadmillScanning = false;
   bool _isHrScanning = false;
+  String _distanceUnitPref = 'km';
+
+  Future<void> _loadDistanceUnitPref() async {
+    try {
+      final activeProfile = await DatabaseHelper.instance.getActiveProfileName();
+      final db = await DatabaseHelper.instance.database;
+      final profRes = await db.query('profiles', where: 'name = ?', whereArgs: [activeProfile], limit: 1);
+      if (profRes.isNotEmpty && mounted) {
+        setState(() {
+          _distanceUnitPref = profRes.first['distance_unit_pref'] as String? ?? 'km';
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading distance unit in Bluetooth sheet: $e');
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadDistanceUnitPref();
     _hrState = AppBluetoothService.instance.isConnected ? BluetoothConnectionState.connected : BluetoothConnectionState.disconnected;
     _treadmillState = TreadmillBluetoothService.instance.connectionState;
     _treadmillStatus = TreadmillBluetoothService.instance.lastStatus;
@@ -2141,8 +1926,24 @@ class _BluetoothDeviceManagerSheetState extends State<BluetoothDeviceManagerShee
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildStatItem('Speed', '${_treadmillStatus?.speed.toStringAsFixed(1) ?? "0.0"} km/h'),
-                          _buildStatItem('Distance', '${_treadmillStatus?.distance.toStringAsFixed(2) ?? "0.00"} km'),
+                          Builder(
+                            builder: (context) {
+                              final bool isMetric = _distanceUnitPref == 'km';
+                              final double rawSpeed = _treadmillStatus?.speed ?? 0.0;
+                              final double displaySpeed = isMetric ? rawSpeed : rawSpeed * 0.621371;
+                              final String speedUnit = isMetric ? 'km/h' : 'mph';
+                              return _buildStatItem('Speed', '${displaySpeed.toStringAsFixed(1)} $speedUnit');
+                            }
+                          ),
+                          Builder(
+                            builder: (context) {
+                              final bool isMetric = _distanceUnitPref == 'km';
+                              final double rawDist = _treadmillStatus?.distance ?? 0.0;
+                              final double displayDist = isMetric ? rawDist : rawDist * 0.621371;
+                              final String distUnit = isMetric ? 'km' : 'mi';
+                              return _buildStatItem('Distance', '${displayDist.toStringAsFixed(2)} $distUnit');
+                            }
+                          ),
                           _buildStatItem('Time', _formatDuration(_treadmillStatus?.time ?? 0)),
                           _buildStatItem('Steps', '${_treadmillStatus?.steps ?? 0}'),
                         ],
@@ -2244,8 +2045,16 @@ class _BluetoothDeviceManagerSheetState extends State<BluetoothDeviceManagerShee
   }
 
   Future<void> _editPresetSpeed(int index) async {
+    final bool isMetric = _distanceUnitPref == 'km';
+    final String speedUnit = isMetric ? 'km/h' : 'mph';
+
+    final double minSpeed = isMetric ? 0.5 : 0.3;
+    final double maxSpeed = isMetric ? 10.0 : 6.2;
+    final int divSpeed = ((maxSpeed - minSpeed) / 0.1).round();
+
     final currentSpeed = TreadmillBluetoothService.instance.speedPresets[index];
-    double selectedSpeed = currentSpeed;
+    final double initialSpeed = isMetric ? currentSpeed : currentSpeed * 0.621371;
+    double selectedSpeed = initialSpeed.clamp(minSpeed, maxSpeed);
 
     final newSpeed = await showDialog<double>(
       context: context,
@@ -2258,16 +2067,16 @@ class _BluetoothDeviceManagerSheetState extends State<BluetoothDeviceManagerShee
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Preset #${index + 1}: ${selectedSpeed.toStringAsFixed(1)} km/h',
+                    'Preset #${index + 1}: ${selectedSpeed.toStringAsFixed(1)} $speedUnit',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 16),
                   Slider(
                     value: selectedSpeed,
-                    min: 0.5,
-                    max: 10.0,
-                    divisions: 95, // 0.5 to 10.0 is 9.5 units, so 95 steps of 0.1
-                    label: '${selectedSpeed.toStringAsFixed(1)} km/h',
+                    min: minSpeed,
+                    max: maxSpeed,
+                    divisions: divSpeed,
+                    label: '${selectedSpeed.toStringAsFixed(1)} $speedUnit',
                     onChanged: (val) {
                       setDialogState(() {
                         selectedSpeed = val;
@@ -2293,8 +2102,9 @@ class _BluetoothDeviceManagerSheetState extends State<BluetoothDeviceManagerShee
     );
 
     if (newSpeed != null && mounted) {
+      final double newKmh = isMetric ? newSpeed : newSpeed * 1.60934;
       setState(() {
-        TreadmillBluetoothService.instance.speedPresets[index] = newSpeed;
+        TreadmillBluetoothService.instance.speedPresets[index] = double.parse(newKmh.toStringAsFixed(1));
       });
       // Persist to database active profile
       try {
@@ -2319,6 +2129,10 @@ class _BluetoothDeviceManagerSheetState extends State<BluetoothDeviceManagerShee
 
   Widget _buildPresetChip(int index) {
     final speed = TreadmillBluetoothService.instance.speedPresets[index];
+    final bool isMetric = _distanceUnitPref == 'km';
+    final double displaySpeed = isMetric ? speed : speed * 0.621371;
+    final String speedUnit = isMetric ? 'km/h' : 'mph';
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2335,7 +2149,7 @@ class _BluetoothDeviceManagerSheetState extends State<BluetoothDeviceManagerShee
             ),
           ),
           child: Text(
-            '${speed.toStringAsFixed(1)} km/h',
+            '${displaySpeed.toStringAsFixed(1)} $speedUnit',
             style: TextStyle(
               color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.bold,
@@ -2439,6 +2253,531 @@ class _PulsingHeartState extends State<PulsingHeart> with SingleTickerProviderSt
         Icons.favorite,
         color: widget.isActive ? Colors.redAccent : Colors.grey.withValues(alpha: 0.3),
         size: 36,
+      ),
+    );
+  }
+}
+
+class _CustomizeWorkoutSheet extends StatefulWidget {
+  final TimerScreenState timerState;
+
+  const _CustomizeWorkoutSheet({required this.timerState});
+
+  @override
+  State<_CustomizeWorkoutSheet> createState() => _CustomizeWorkoutSheetState();
+}
+
+class _CustomizeWorkoutSheetState extends State<_CustomizeWorkoutSheet> {
+  void _updateState(VoidCallback fn) {
+    setState(fn);
+    widget.timerState.setState(fn);
+    if (widget.timerState._currentEvent.state == WorkoutState.FINISHED) {
+      widget.timerState._resetToIdle();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTreadmill = TreadmillBluetoothService.instance.treadmillEnabled &&
+        widget.timerState._treadmillWorkout;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        24,
+        16,
+        16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Drag Handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Customize Workout',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        icon: const Icon(Icons.save),
+                        label: const Text('Save Template'),
+                        onPressed: widget.timerState._showSaveTemplateDialog,
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  // Work Duration Slider & Steppers
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Work Duration',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                            ),
+                            Text(
+                              widget.timerState._formatDuration(widget.timerState._workDuration),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: () {
+                              _updateState(() {
+                                widget.timerState._workDuration = widget.timerState._decrementWorkDuration(widget.timerState._workDuration);
+                              });
+                            },
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: widget.timerState._secondsToSliderValue(widget.timerState._workDuration),
+                              min: 0.0,
+                              max: 1.0,
+                              label: widget.timerState._formatDuration(widget.timerState._workDuration),
+                              onChanged: (val) {
+                                _updateState(() {
+                                  widget.timerState._workDuration = widget.timerState._sliderValueToSeconds(val);
+                                });
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () {
+                              _updateState(() {
+                                widget.timerState._workDuration = widget.timerState._incrementWorkDuration(widget.timerState._workDuration);
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Rest Duration Slider & Steppers
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Rest Duration',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                            ),
+                            Text(
+                              widget.timerState._restDuration == 0 ? 'None' : widget.timerState._formatDuration(widget.timerState._restDuration),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: () {
+                              _updateState(() {
+                                widget.timerState._restDuration = widget.timerState._decrementRestDuration(widget.timerState._restDuration);
+                              });
+                            },
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: widget.timerState._secondsToRestSliderValue(widget.timerState._restDuration),
+                              min: 0.0,
+                              max: 1.0,
+                              label: widget.timerState._restDuration == 0 ? 'None' : widget.timerState._formatDuration(widget.timerState._restDuration),
+                              onChanged: (val) {
+                                _updateState(() {
+                                  widget.timerState._restDuration = widget.timerState._sliderValueToRestSeconds(val);
+                                });
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () {
+                              _updateState(() {
+                                widget.timerState._restDuration = widget.timerState._incrementRestDuration(widget.timerState._restDuration);
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Rounds Slider & Steppers
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Rounds',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                            ),
+                            Text(
+                              '${widget.timerState._totalRounds}',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: () {
+                              _updateState(() {
+                                widget.timerState._totalRounds = (widget.timerState._totalRounds - 1).clamp(1, 50);
+                              });
+                            },
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: widget.timerState._totalRounds.toDouble(),
+                              min: 1,
+                              max: 50,
+                              divisions: 49,
+                              label: '${widget.timerState._totalRounds}',
+                              onChanged: (val) {
+                                _updateState(() {
+                                  widget.timerState._totalRounds = val.toInt();
+                                });
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () {
+                              _updateState(() {
+                                widget.timerState._totalRounds = (widget.timerState._totalRounds + 1).clamp(1, 50);
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  SwitchListTile(
+                    title: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Auto Regulate Rest'),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => widget.timerState._showHelpDialog(
+                            'Auto Regulate Rest',
+                            'Hold the rest phase countdown until your heart rate drops below your profile\'s configured threshold (currently ${widget.timerState._maxPreworkHr} BPM). Requires a connected heart rate monitor.',
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: Icon(
+                              Icons.help_outline,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    value: widget.timerState._autoRegulationEnabled,
+                    onChanged: widget.timerState._isBluetoothConnected
+                        ? (val) => _updateState(() => widget.timerState._autoRegulationEnabled = val)
+                        : null,
+                  ),
+                  SwitchListTile(
+                    title: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Open Ended Workout'),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => widget.timerState._showHelpDialog(
+                            'Open Ended Workout',
+                            'The workout will run indefinitely, incrementing rounds continuously until you manually tap the Stop/End button.',
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: Icon(
+                              Icons.help_outline,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    value: widget.timerState._continuousMode,
+                    onChanged: (val) => _updateState(() => widget.timerState._continuousMode = val),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Activity Type'),
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => widget.timerState._showHelpDialog(
+                              'Activity Type',
+                              'Select the exercise category. This value is used to categorize the workout when saving it to Apple Health.',
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child: Icon(
+                               Icons.help_outline,
+                               size: 16,
+                               color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      DropdownButton<String>(
+                        value: widget.timerState._activityType,
+                        items: const [
+                          DropdownMenuItem(value: 'HIIT', child: Text('HIIT / Interval')),
+                          DropdownMenuItem(value: 'STRENGTH', child: Text('Strength Training')),
+                          DropdownMenuItem(value: 'FUNCTIONAL_STRENGTH', child: Text('Functional Strength')),
+                          DropdownMenuItem(value: 'CORE', child: Text('Core Training')),
+                          DropdownMenuItem(value: 'CARDIO', child: Text('Mixed Cardio')),
+                          DropdownMenuItem(value: 'YOGA', child: Text('Yoga')),
+                          DropdownMenuItem(value: 'PILATES', child: Text('Pilates')),
+                          DropdownMenuItem(value: 'CALISTHENICS', child: Text('Calisthenics')),
+                          DropdownMenuItem(value: 'OTHER', child: Text('Other')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            _updateState(() {
+                              widget.timerState._activityType = val;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  if (hasTreadmill) ...[
+                    const Divider(),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                        child: Text(
+                          'WalkingPad Treadmill',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                    SwitchListTile(
+                      title: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Auto Speed Sync'),
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => widget.timerState._showHelpDialog(
+                              'Auto Speed Sync',
+                              'Automatically controls the treadmill speed based on your workout interval. On WORK, it starts the belt and ramps up to Work Speed. On REST, it slows down to Rest Speed (or stops the belt). On PAUSE/END, it stops the belt.',
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child: Icon(
+                                Icons.help_outline,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      subtitle: Text(
+                        widget.timerState._treadmillConnectionState == BluetoothConnectionState.connected
+                            ? 'Connected and ready'
+                            : 'Treadmill not connected (auto-sync will activate upon connection)',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      value: TreadmillBluetoothService.instance.autoSpeedSync,
+                      onChanged: (val) => _updateState(() {
+                        TreadmillBluetoothService.instance.autoSpeedSync = val;
+                      }),
+                    ),
+                    if (TreadmillBluetoothService.instance.autoSpeedSync) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: Builder(
+                          builder: (context) {
+                            final bool isMetric = widget.timerState._distanceUnitPref == 'km';
+                            final String speedUnit = isMetric ? 'km/h' : 'mph';
+
+                            // Work Speed
+                            final double rawWorkSpeed = TreadmillBluetoothService.instance.workSpeed;
+                            final double displayWorkSpeed = isMetric ? rawWorkSpeed : rawWorkSpeed * 0.621371;
+                            final double minWork = isMetric ? 0.5 : 0.3;
+                            final double maxWork = isMetric ? 10.0 : 6.2;
+                            final int divWork = ((maxWork - minWork) / 0.1).round();
+
+                            // Rest Speed
+                            final double rawRestSpeed = TreadmillBluetoothService.instance.restSpeed;
+                            final double displayRestSpeed = isMetric ? rawRestSpeed : rawRestSpeed * 0.621371;
+                            final double minRest = 0.0;
+                            final double maxRest = isMetric ? 10.0 : 6.2;
+                            final int divRest = ((maxRest - minRest) / 0.1).round();
+
+                            // Clamp values to prevent Slider assertion failures due to precision differences
+                            final double clampedWork = displayWorkSpeed.clamp(minWork, maxWork);
+                            final double clampedRest = displayRestSpeed.clamp(minRest, maxRest);
+
+                            return Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Work Phase Speed'),
+                                    Text(
+                                      '${clampedWork.toStringAsFixed(1)} $speedUnit',
+                                      style: TextStyle(
+                                        color: Theme.of(context).colorScheme.primary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Slider(
+                                  value: clampedWork,
+                                  min: minWork,
+                                  max: maxWork,
+                                  divisions: divWork,
+                                  label: '${clampedWork.toStringAsFixed(1)} $speedUnit',
+                                  onChanged: (val) => _updateState(() {
+                                    final double newKmh = isMetric ? val : val * 1.60934;
+                                    TreadmillBluetoothService.instance.workSpeed = double.parse(newKmh.toStringAsFixed(1));
+                                  }),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Rest Phase Speed'),
+                                    Text(
+                                      clampedRest == 0.0
+                                          ? 'Stop (0.0 $speedUnit)'
+                                          : '${clampedRest.toStringAsFixed(1)} $speedUnit',
+                                      style: TextStyle(
+                                        color: Theme.of(context).colorScheme.secondary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Slider(
+                                  value: clampedRest,
+                                  min: minRest,
+                                  max: maxRest,
+                                  divisions: divRest,
+                                  label: clampedRest == 0.0
+                                      ? 'Stop'
+                                      : '${clampedRest.toStringAsFixed(1)} $speedUnit',
+                                  onChanged: (val) => _updateState(() {
+                                    final double newKmh = isMetric ? val : val * 1.60934;
+                                    TreadmillBluetoothService.instance.restSpeed = double.parse(newKmh.toStringAsFixed(1));
+                                  }),
+                                ),
+                              ],
+                            );
+                          }
+                        ),
+                      ),
+                    ],
+                  ],
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: widget.timerState._notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Workout Notes',
+                      hintText: 'Enter notes for this workout...',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.note),
+                    ),
+                    maxLines: 2,
+                    onChanged: (val) {
+                      _updateState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

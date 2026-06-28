@@ -24,6 +24,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
   List<Map<String, dynamic>> _workouts = [];
   final Map<int, List<Map<String, dynamic>>> _hrLogs = {};
   int _maxHr = 180;
+  String _distanceUnitPref = 'km';
 
   final List<Color> _nordColors = const [
     Color(0xFF0DF2A3), // Mint Neon
@@ -44,10 +45,11 @@ class _DetailsScreenState extends State<DetailsScreen> {
     try {
       final db = await DatabaseHelper.instance.database;
       
-      // Get profile max_hr
+      // Get profile max_hr and distance unit preference
       final profRes = await db.query('profiles', where: 'name = ?', whereArgs: [widget.profileName], limit: 1);
       if (profRes.isNotEmpty) {
         _maxHr = profRes.first['max_hr'] as int? ?? 180;
+        _distanceUnitPref = profRes.first['distance_unit_pref'] as String? ?? 'km';
       }
 
       // Get workouts
@@ -98,7 +100,10 @@ class _DetailsScreenState extends State<DetailsScreen> {
       final StringBuffer csvBuffer = StringBuffer();
       
       // Header row
-      csvBuffer.writeln('Workout,Start Time,Rounds,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),Calories (kcal),Run Dist (km),Run Peak Speed (km/h),Run Avg Speed (km/h),Notes');
+      final bool isMetric = _distanceUnitPref == 'km';
+      final String distUnit = isMetric ? 'km' : 'mi';
+      final String speedUnit = isMetric ? 'km/h' : 'mph';
+      csvBuffer.writeln('Workout,Start Time,Rounds,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),Calories (kcal),Run Dist ($distUnit),Run Peak Speed ($speedUnit),Run Avg Speed ($speedUnit),Notes');
 
       for (int i = 0; i < _workouts.length; i++) {
         final w = _workouts[i];
@@ -118,9 +123,18 @@ class _DetailsScreenState extends State<DetailsScreen> {
         final String peakHr = _fmtHr(w['max_hr']);
         final String avgHr = _fmtHr(w['avg_hr']);
         final String calories = (w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--';
-        final String runDist = (w['run_distance'] as num?)?.toStringAsFixed(2) ?? '0.00';
-        final String runPeak = (w['run_peak_speed'] as num?)?.toStringAsFixed(1) ?? '0.0';
-        final String runAvg = (w['run_avg_speed'] as num?)?.toStringAsFixed(1) ?? '0.0';
+
+        final double rawDist = (w['run_distance'] as num?)?.toDouble() ?? 0.0;
+        final double rawPeak = (w['run_peak_speed'] as num?)?.toDouble() ?? 0.0;
+        final double rawAvg = (w['run_avg_speed'] as num?)?.toDouble() ?? 0.0;
+
+        final double displayDist = isMetric ? rawDist : rawDist * 0.621371;
+        final double displayPeak = isMetric ? rawPeak : rawPeak * 0.621371;
+        final double displayAvg = isMetric ? rawAvg : rawAvg * 0.621371;
+
+        final String runDist = displayDist.toStringAsFixed(2);
+        final String runPeak = displayPeak.toStringAsFixed(1);
+        final String runAvg = displayAvg.toStringAsFixed(1);
         
         // Escape notes for CSV
         String notes = w['notes'] as String? ?? '';
@@ -259,6 +273,17 @@ class _DetailsScreenState extends State<DetailsScreen> {
             final String name = (w['workout_name'] as String? ?? '').isNotEmpty
                 ? w['workout_name'] as String
                 : 'WO ${idx + 1}';
+            final bool isMetric = _distanceUnitPref == 'km';
+            final double runDistance = (w['run_distance'] as num?)?.toDouble() ?? 0.0;
+            final double runPeakSpeed = (w['run_peak_speed'] as num?)?.toDouble() ?? 0.0;
+            final double runAvgSpeed = (w['run_avg_speed'] as num?)?.toDouble() ?? 0.0;
+
+            final double displayDist = isMetric ? runDistance : runDistance * 0.621371;
+            final double displayPeak = isMetric ? runPeakSpeed : runPeakSpeed * 0.621371;
+            final double displayAvg = isMetric ? runAvgSpeed : runAvgSpeed * 0.621371;
+            final String distUnit = isMetric ? 'km' : 'mi';
+            final String speedUnit = isMetric ? 'km/h' : 'mph';
+
             return DataRow(cells: [
               DataCell(Text(name, style: TextStyle(color: wColor, fontWeight: FontWeight.bold))),
             DataCell(Text(startStr)),
@@ -269,9 +294,9 @@ class _DetailsScreenState extends State<DetailsScreen> {
             DataCell(Text(_fmtHr(w['max_hr']), style: const TextStyle(color: Color(0xFFFF3B30)))), // Neon Red
             DataCell(Text(_fmtHr(w['avg_hr']), style: const TextStyle(color: Color(0xFF38B6FF)))), // Cyan/Blue
             DataCell(Text((w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--', style: const TextStyle(color: Color(0xFFBF5AF2)))), // Neon Purple
-            DataCell(Text(w['run_distance'] != null && (w['run_distance'] as num) > 0 ? "${(w['run_distance'] as num).toStringAsFixed(2)} km" : '--', style: const TextStyle(color: Color(0xFF00E5FF)))),
-            DataCell(Text(w['run_peak_speed'] != null && (w['run_peak_speed'] as num) > 0 ? "${(w['run_peak_speed'] as num).toStringAsFixed(1)} km/h" : '--')),
-            DataCell(Text(w['run_avg_speed'] != null && (w['run_avg_speed'] as num) > 0 ? "${(w['run_avg_speed'] as num).toStringAsFixed(1)} km/h" : '--')),
+            DataCell(Text(runDistance > 0 ? "${displayDist.toStringAsFixed(2)} $distUnit" : '--', style: const TextStyle(color: Color(0xFF00E5FF)))),
+            DataCell(Text(runPeakSpeed > 0 ? "${displayPeak.toStringAsFixed(1)} $speedUnit" : '--')),
+            DataCell(Text(runAvgSpeed > 0 ? "${displayAvg.toStringAsFixed(1)} $speedUnit" : '--')),
             DataCell(
               InkWell(
                 onTap: () => _editWorkoutNotes(w),

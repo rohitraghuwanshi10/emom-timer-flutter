@@ -27,6 +27,7 @@ class ProfileScreenState extends State<ProfileScreen> {
   double _preset1 = 2.0;
   double _preset2 = 4.0;
   double _preset3 = 6.0;
+  String _distanceUnitPref = 'km';
 
   Future<void> _triggerSync() async {
     final success = await SyncService.instance.signInAndSync();
@@ -94,10 +95,11 @@ class ProfileScreenState extends State<ProfileScreen> {
           _preset1 = (profile['treadmill_preset_1'] as num?)?.toDouble() ?? 2.0;
           _preset2 = (profile['treadmill_preset_2'] as num?)?.toDouble() ?? 4.0;
           _preset3 = (profile['treadmill_preset_3'] as num?)?.toDouble() ?? 6.0;
+          _distanceUnitPref = profile['distance_unit_pref'] as String? ?? 'km';
         });
       }
     } catch (e) {
-      debugPrint('Error loading profile: \$e');
+      debugPrint('Error loading profile: $e');
     }
     setState(() => _isLoading = false);
   }
@@ -120,6 +122,7 @@ class ProfileScreenState extends State<ProfileScreen> {
           'treadmill_preset_1': _preset1,
           'treadmill_preset_2': _preset2,
           'treadmill_preset_3': _preset3,
+          'distance_unit_pref': _distanceUnitPref,
         },
         where: 'name = ?',
         whereArgs: [_profileName],
@@ -393,6 +396,27 @@ class ProfileScreenState extends State<ProfileScreen> {
                 },
               ),
             ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Units of Measurement'),
+              subtitle: const Text('Select distance and speed units (Kilometers vs Miles).'),
+              trailing: DropdownButton<String>(
+                value: _distanceUnitPref,
+                underline: const SizedBox(),
+                items: const [
+                  DropdownMenuItem(value: 'km', child: Text('Metric (km, km/h)')),
+                  DropdownMenuItem(value: 'mi', child: Text('Imperial (mi, mph)')),
+                ],
+                onChanged: (val) async {
+                  if (val != null) {
+                    setState(() {
+                      _distanceUnitPref = val;
+                    });
+                    await _saveProfile(showFeedback: false);
+                  }
+                },
+              ),
+            ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Auto-connect Heart Rate Monitor'),
@@ -475,28 +499,46 @@ class ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildPresetField(String label, double value, ValueChanged<double> onChanged) {
+  Widget _buildPresetField(String label, double valueKmh, ValueChanged<double> onChanged) {
+    final bool isMetric = _distanceUnitPref == 'km';
+    final double displayVal = isMetric 
+        ? double.parse(valueKmh.toStringAsFixed(1))
+        : double.parse((valueKmh * 0.621371).toStringAsFixed(1));
+
+    final double step = 0.1;
+    final double minVal = isMetric ? 0.5 : 0.3;
+    final double maxVal = isMetric ? 10.0 : 6.2;
+    final int divisions = ((maxVal - minVal) / step).round();
+    final List<double> options = List.generate(divisions + 1, (index) => double.parse((minVal + index * step).toStringAsFixed(1)));
+
+    // Ensure displayVal is in options to avoid DropdownButton assertion error
+    if (!options.contains(displayVal)) {
+      options.add(displayVal);
+      options.sort();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         const SizedBox(height: 4),
         DropdownButton<double>(
-          value: value,
+          value: displayVal,
           isExpanded: true,
           underline: Container(
             height: 1,
             color: Colors.grey.withValues(alpha: 0.5),
           ),
-          items: List.generate(96, (index) => 0.5 + index * 0.1)
+          items: options
               .map((val) => DropdownMenuItem<double>(
-                    value: double.parse(val.toStringAsFixed(1)),
-                    child: Text('${val.toStringAsFixed(1)} km/h', style: const TextStyle(fontSize: 13)),
+                    value: val,
+                    child: Text('${val.toStringAsFixed(1)} ${isMetric ? "km/h" : "mph"}', style: const TextStyle(fontSize: 13)),
                   ))
               .toList(),
           onChanged: (val) async {
             if (val != null) {
-              onChanged(val);
+              final double newKmh = isMetric ? val : val * 1.60934;
+              onChanged(double.parse(newKmh.toStringAsFixed(1)));
               await _saveProfile(showFeedback: false);
             }
           },

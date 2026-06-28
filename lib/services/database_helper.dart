@@ -112,7 +112,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 10,
+        version: 11,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -218,6 +218,13 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for workouts run_avg_speed: $e');
             }
           }
+          if (oldVersion < 11) {
+            try {
+              await db.execute("ALTER TABLE profiles ADD COLUMN distance_unit_pref TEXT DEFAULT 'km'");
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for profiles distance_unit_pref: $e');
+            }
+          }
         },
       ),
     );
@@ -234,6 +241,7 @@ class DatabaseHelper {
           birth_date TEXT,
           weight_kg REAL,
           weight_unit_pref TEXT,
+          distance_unit_pref TEXT DEFAULT 'km',
           auto_connect_hr INTEGER,
           health_enabled INTEGER DEFAULT 0,
           save_history INTEGER DEFAULT 1,

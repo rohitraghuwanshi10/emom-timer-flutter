@@ -19,6 +19,7 @@ class LibraryScreenState extends State<LibraryScreen> {
   List<Map<String, dynamic>> _filteredTemplates = [];
   String _searchQuery = '';
   String _selectedActivityFilter = 'All';
+  String _distanceUnitPref = 'km';
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -54,6 +55,9 @@ class LibraryScreenState extends State<LibraryScreen> {
       
       final allProfiles = await db.query('profiles', columns: ['name']);
       final profileNames = allProfiles.map((p) => p['name'] as String).toList();
+
+      final profRes = await db.query('profiles', where: 'name = ?', whereArgs: [activeProfile], limit: 1);
+      final unitPref = profRes.isNotEmpty ? (profRes.first['distance_unit_pref'] as String? ?? 'km') : 'km';
       
       final templates = await db.query(
         'workout_templates',
@@ -66,6 +70,7 @@ class LibraryScreenState extends State<LibraryScreen> {
           _profileName = activeProfile;
           _availableProfiles = profileNames;
           _allTemplates = templates;
+          _distanceUnitPref = unitPref;
           _applyFilters();
         });
       }
@@ -363,8 +368,11 @@ class LibraryScreenState extends State<LibraryScreen> {
     String activityType = isEditing ? template['activity_type'] as String? ?? 'HIIT' : 'HIIT';
     bool autoRegulate = isEditing ? (template['auto_regulate'] as int? ?? 1) == 1 : true;
     bool treadmillWorkout = isEditing ? (template['treadmill_workout'] as int? ?? 0) == 1 : false;
-    double workSpeed = isEditing ? (template['work_speed'] as num?)?.toDouble() ?? 4.0 : 4.0;
-    double restSpeed = isEditing ? (template['rest_speed'] as num?)?.toDouble() ?? 0.0 : 0.0;
+    final bool isMetric = _distanceUnitPref == 'km';
+    final double rawWorkSpeed = isEditing ? (template['work_speed'] as num?)?.toDouble() ?? 4.0 : 4.0;
+    final double rawRestSpeed = isEditing ? (template['rest_speed'] as num?)?.toDouble() ?? 0.0 : 0.0;
+    double workSpeed = isMetric ? rawWorkSpeed : rawWorkSpeed * 0.621371;
+    double restSpeed = isMetric ? rawRestSpeed : rawRestSpeed * 0.621371;
 
     showModalBottomSheet(
       context: context,
@@ -601,48 +609,70 @@ class LibraryScreenState extends State<LibraryScreen> {
                     ),
                     if (treadmillWorkout) ...[
                       const SizedBox(height: 8),
-                      // Work Speed Slider for Template
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Treadmill Work Speed', style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text('${workSpeed.toStringAsFixed(1)} km/h',
-                              style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      Slider(
-                        value: workSpeed,
-                        min: 0.5,
-                        max: 10.0,
-                        divisions: 95,
-                        label: '${workSpeed.toStringAsFixed(1)} km/h',
-                        onChanged: (val) {
-                          setModalState(() {
-                            workSpeed = val;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      // Rest Speed Slider for Template
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Treadmill Rest Speed', style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text(restSpeed == 0.0 ? 'Stop (0.0 km/h)' : '${restSpeed.toStringAsFixed(1)} km/h',
-                              style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      Slider(
-                        value: restSpeed,
-                        min: 0.0,
-                        max: 10.0,
-                        divisions: 100,
-                        label: restSpeed == 0.0 ? 'Stop' : '${restSpeed.toStringAsFixed(1)} km/h',
-                        onChanged: (val) {
-                          setModalState(() {
-                            restSpeed = val;
-                          });
-                        },
+                      Builder(
+                        builder: (context) {
+                          final String speedUnit = isMetric ? 'km/h' : 'mph';
+
+                          final double minWork = isMetric ? 0.5 : 0.3;
+                          final double maxWork = isMetric ? 10.0 : 6.2;
+                          final int divWork = ((maxWork - minWork) / 0.1).round();
+
+                          final double minRest = 0.0;
+                          final double maxRest = isMetric ? 10.0 : 6.2;
+                          final int divRest = ((maxRest - minRest) / 0.1).round();
+
+                          final double clampedWork = workSpeed.clamp(minWork, maxWork);
+                          final double clampedRest = restSpeed.clamp(minRest, maxRest);
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Work Speed Slider for Template
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Treadmill Work Speed', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  Text('${clampedWork.toStringAsFixed(1)} $speedUnit',
+                                      style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                              Slider(
+                                value: clampedWork,
+                                min: minWork,
+                                max: maxWork,
+                                divisions: divWork,
+                                label: '${clampedWork.toStringAsFixed(1)} $speedUnit',
+                                onChanged: (val) {
+                                  setModalState(() {
+                                    workSpeed = val;
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                              // Rest Speed Slider for Template
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Treadmill Rest Speed', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  Text(clampedRest == 0.0 ? 'Stop (0.0 $speedUnit)' : '${clampedRest.toStringAsFixed(1)} $speedUnit',
+                                      style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                              Slider(
+                                value: clampedRest,
+                                min: minRest,
+                                max: maxRest,
+                                divisions: divRest,
+                                label: clampedRest == 0.0 ? 'Stop' : '${clampedRest.toStringAsFixed(1)} $speedUnit',
+                                onChanged: (val) {
+                                  setModalState(() {
+                                    restSpeed = val;
+                                  });
+                                },
+                              ),
+                            ],
+                          );
+                        }
                       ),
                     ],
                     const SizedBox(height: 8),
@@ -674,6 +704,9 @@ class LibraryScreenState extends State<LibraryScreen> {
                         try {
                           final db = await DatabaseHelper.instance.database;
                           
+                          final double dbWorkSpeed = isMetric ? workSpeed : workSpeed * 1.60934;
+                          final double dbRestSpeed = isMetric ? restSpeed : restSpeed * 1.60934;
+
                           if (isEditing) {
                             // Update template in DB
                             await db.update(
@@ -688,8 +721,8 @@ class LibraryScreenState extends State<LibraryScreen> {
                                 'activity_type': activityType,
                                 'auto_regulate': autoRegulate ? 1 : 0,
                                 'treadmill_workout': treadmillWorkout ? 1 : 0,
-                                'work_speed': workSpeed,
-                                'rest_speed': restSpeed,
+                                'work_speed': dbWorkSpeed,
+                                'rest_speed': dbRestSpeed,
                               },
                               where: 'id = ?',
                               whereArgs: [template['id']],
@@ -713,8 +746,8 @@ class LibraryScreenState extends State<LibraryScreen> {
                                 'activity_type': activityType,
                                 'auto_regulate': autoRegulate ? 1 : 0,
                                 'treadmill_workout': treadmillWorkout ? 1 : 0,
-                                'work_speed': workSpeed,
-                                'rest_speed': restSpeed,
+                                'work_speed': dbWorkSpeed,
+                                'rest_speed': dbRestSpeed,
                               },
                               conflictAlgorithm: ConflictAlgorithm.replace,
                             );
