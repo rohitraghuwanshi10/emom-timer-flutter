@@ -611,7 +611,7 @@ void main() {
     });
 
     test('Migration from version 10 to 11 adds distance_unit_pref to profiles successfully', () async {
-      final dbPath = (await getDatabasesPath()) + '/migration_v10_to_v11.db';
+      final dbPath = '${await getDatabasesPath()}/migration_v10_to_v11.db';
       await deleteDatabase(dbPath);
 
       final db = await openDatabase(

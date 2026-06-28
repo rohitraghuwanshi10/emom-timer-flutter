@@ -55,7 +55,11 @@ class ProfileScreenState extends State<ProfileScreen> {
 
   void _onSyncStatusChanged() {
     if (mounted) {
-      setState(() {});
+      if (!SyncService.instance.isSyncing) {
+        loadProfile();
+      } else {
+        setState(() {});
+      }
     }
   }
 
