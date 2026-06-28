@@ -645,5 +645,41 @@ void main() {
 
       await dbV11.close();
     });
+
+    test('Migration from version 11 to 12 adds updated_at to profiles successfully', () async {
+      final dbPath = '${await getDatabasesPath()}/migration_v11_to_v12.db';
+      await deleteDatabase(dbPath);
+
+      final db = await openDatabase(
+        dbPath,
+        version: 11,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL
+            )
+          ''');
+        },
+      );
+
+      await db.insert('profiles', {'name': 'Default', 'created_at': '2026-06-20T12:00:00'});
+      await db.close();
+
+      final dbV12 = await openDatabase(
+        dbPath,
+        version: 12,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 12) {
+            await db.execute("ALTER TABLE profiles ADD COLUMN updated_at TEXT");
+          }
+        },
+      );
+
+      final profiles = await dbV12.query('profiles');
+      expect(profiles.first.containsKey('updated_at'), isTrue);
+
+      await dbV12.close();
+    });
   });
 }

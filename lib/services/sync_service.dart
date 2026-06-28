@@ -84,36 +84,110 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
     final localProfiles = await db.query('profiles');
     
-    // Upload local profiles to Firestore
+    // Download remote profiles from Firestore first so we can do a smart conflict merge
+    final remoteProfilesSnapshot = await _firestore.collection('profiles').get();
+    final remoteProfilesMap = {for (var doc in remoteProfilesSnapshot.docs) doc.id: doc.data()};
+
+    // Keep track of names we have processed
+    final processedNames = <String>{};
+
     for (var local in localProfiles) {
       final name = local['name'] as String;
-      await _firestore.collection('profiles').doc(name).set({
-        'name': name,
-        'created_at': local['created_at'],
-        'max_hr': local['max_hr'],
-        'max_prework_hr': local['max_prework_hr'],
-        'sex': local['sex'],
-        'birth_date': local['birth_date'],
-        'weight_kg': local['weight_kg'],
-        'weight_unit_pref': local['weight_unit_pref'],
-        'distance_unit_pref': local['distance_unit_pref'] ?? 'km',
-        'auto_connect_hr': local['auto_connect_hr'],
-        'save_history': local['save_history'] ?? 1,
-        'treadmill_enabled': local['treadmill_enabled'] ?? 0,
-        'treadmill_preset_1': local['treadmill_preset_1'] ?? 2.0,
-        'treadmill_preset_2': local['treadmill_preset_2'] ?? 4.0,
-        'treadmill_preset_3': local['treadmill_preset_3'] ?? 6.0,
-      }, SetOptions(merge: true));
+      processedNames.add(name);
+
+      final localUpdatedAtStr = local['updated_at'] as String?;
+      final localUpdatedAt = localUpdatedAtStr != null ? DateTime.tryParse(localUpdatedAtStr) : null;
+
+      final remoteData = remoteProfilesMap[name];
+      
+      if (remoteData != null) {
+        final remoteUpdatedAtStr = remoteData['updated_at'] as String?;
+        final remoteUpdatedAt = remoteUpdatedAtStr != null ? DateTime.tryParse(remoteUpdatedAtStr) : null;
+
+        // If local is newer, upload local to remote. If remote is newer, download remote.
+        if (localUpdatedAt == null || (remoteUpdatedAt != null && remoteUpdatedAt.isAfter(localUpdatedAt))) {
+          // Remote is newer, download remote to local
+          final updateData = <String, dynamic>{
+            'max_hr': remoteData['max_hr'],
+            'max_prework_hr': remoteData['max_prework_hr'],
+            'sex': remoteData['sex'],
+            'birth_date': remoteData['birth_date'],
+            'weight_kg': remoteData['weight_kg'],
+            'weight_unit_pref': remoteData['weight_unit_pref'],
+            'auto_connect_hr': remoteData['auto_connect_hr'],
+            'updated_at': remoteUpdatedAtStr,
+          };
+          if (remoteData.containsKey('distance_unit_pref')) {
+            updateData['distance_unit_pref'] = remoteData['distance_unit_pref'] ?? 'km';
+          }
+          if (remoteData.containsKey('save_history')) {
+            updateData['save_history'] = remoteData['save_history'] ?? 1;
+          }
+          if (remoteData.containsKey('treadmill_enabled')) {
+            updateData['treadmill_enabled'] = remoteData['treadmill_enabled'] ?? 0;
+          }
+          if (remoteData.containsKey('treadmill_preset_1')) {
+            updateData['treadmill_preset_1'] = remoteData['treadmill_preset_1'] ?? 2.0;
+          }
+          if (remoteData.containsKey('treadmill_preset_2')) {
+            updateData['treadmill_preset_2'] = remoteData['treadmill_preset_2'] ?? 4.0;
+          }
+          if (remoteData.containsKey('treadmill_preset_3')) {
+            updateData['treadmill_preset_3'] = remoteData['treadmill_preset_3'] ?? 6.0;
+          }
+          await db.update('profiles', updateData, where: 'name = ?', whereArgs: [name]);
+          debugPrint('SyncService: Downloaded newer profile $name from Firestore.');
+        } else {
+          // Local is newer, upload local to remote
+          await _firestore.collection('profiles').doc(name).set({
+            'name': name,
+            'created_at': local['created_at'],
+            'max_hr': local['max_hr'],
+            'max_prework_hr': local['max_prework_hr'],
+            'sex': local['sex'],
+            'birth_date': local['birth_date'],
+            'weight_kg': local['weight_kg'],
+            'weight_unit_pref': local['weight_unit_pref'],
+            'distance_unit_pref': local['distance_unit_pref'] ?? 'km',
+            'auto_connect_hr': local['auto_connect_hr'],
+            'save_history': local['save_history'] ?? 1,
+            'treadmill_enabled': local['treadmill_enabled'] ?? 0,
+            'treadmill_preset_1': local['treadmill_preset_1'] ?? 2.0,
+            'treadmill_preset_2': local['treadmill_preset_2'] ?? 4.0,
+            'treadmill_preset_3': local['treadmill_preset_3'] ?? 6.0,
+            'updated_at': localUpdatedAtStr,
+          }, SetOptions(merge: true));
+          debugPrint('SyncService: Uploaded newer profile $name to Firestore.');
+        }
+      } else {
+        // Remote does not exist, upload local to remote
+        await _firestore.collection('profiles').doc(name).set({
+          'name': name,
+          'created_at': local['created_at'],
+          'max_hr': local['max_hr'],
+          'max_prework_hr': local['max_prework_hr'],
+          'sex': local['sex'],
+          'birth_date': local['birth_date'],
+          'weight_kg': local['weight_kg'],
+          'weight_unit_pref': local['weight_unit_pref'],
+          'distance_unit_pref': local['distance_unit_pref'] ?? 'km',
+          'auto_connect_hr': local['auto_connect_hr'],
+          'save_history': local['save_history'] ?? 1,
+          'treadmill_enabled': local['treadmill_enabled'] ?? 0,
+          'treadmill_preset_1': local['treadmill_preset_1'] ?? 2.0,
+          'treadmill_preset_2': local['treadmill_preset_2'] ?? 4.0,
+          'treadmill_preset_3': local['treadmill_preset_3'] ?? 6.0,
+          'updated_at': localUpdatedAtStr ?? DateTime.now().toIso8601String(),
+        }, SetOptions(merge: true));
+        debugPrint('SyncService: Uploaded new profile $name to Firestore.');
+      }
     }
 
-    // Download remote profiles from Firestore
-    final remoteProfiles = await _firestore.collection('profiles').get();
-    for (var doc in remoteProfiles.docs) {
-      final name = doc.id;
-      final data = doc.data();
-      final exists = localProfiles.any((p) => p['name'] == name);
-      
-      if (!exists) {
+    // Download remote profiles that do not exist locally
+    for (var entry in remoteProfilesMap.entries) {
+      final name = entry.key;
+      final data = entry.value;
+      if (!processedNames.contains(name)) {
         await db.insert('profiles', {
           'name': name,
           'created_at': data['created_at'] ?? DateTime.now().toIso8601String(),
@@ -130,38 +204,9 @@ class SyncService extends ChangeNotifier {
           'treadmill_preset_1': data['treadmill_preset_1'] ?? 2.0,
           'treadmill_preset_2': data['treadmill_preset_2'] ?? 4.0,
           'treadmill_preset_3': data['treadmill_preset_3'] ?? 6.0,
+          'updated_at': data['updated_at'],
         });
-        debugPrint('SyncService: Downloaded profile $name');
-      } else {
-        // Update local profile details from Firestore
-        final updateData = <String, dynamic>{
-          'max_hr': data['max_hr'],
-          'max_prework_hr': data['max_prework_hr'],
-          'sex': data['sex'],
-          'birth_date': data['birth_date'],
-          'weight_kg': data['weight_kg'],
-          'weight_unit_pref': data['weight_unit_pref'],
-          'auto_connect_hr': data['auto_connect_hr'],
-        };
-        if (data.containsKey('distance_unit_pref')) {
-          updateData['distance_unit_pref'] = data['distance_unit_pref'] ?? 'km';
-        }
-        if (data.containsKey('save_history')) {
-          updateData['save_history'] = data['save_history'] ?? 1;
-        }
-        if (data.containsKey('treadmill_enabled')) {
-          updateData['treadmill_enabled'] = data['treadmill_enabled'] ?? 0;
-        }
-        if (data.containsKey('treadmill_preset_1')) {
-          updateData['treadmill_preset_1'] = data['treadmill_preset_1'] ?? 2.0;
-        }
-        if (data.containsKey('treadmill_preset_2')) {
-          updateData['treadmill_preset_2'] = data['treadmill_preset_2'] ?? 4.0;
-        }
-        if (data.containsKey('treadmill_preset_3')) {
-          updateData['treadmill_preset_3'] = data['treadmill_preset_3'] ?? 6.0;
-        }
-        await db.update('profiles', updateData, where: 'name = ?', whereArgs: [name]);
+        debugPrint('SyncService: Downloaded remote-only profile $name');
       }
     }
 

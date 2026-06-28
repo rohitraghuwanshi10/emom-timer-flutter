@@ -127,6 +127,7 @@ class ProfileScreenState extends State<ProfileScreen> {
           'treadmill_preset_2': _preset2,
           'treadmill_preset_3': _preset3,
           'distance_unit_pref': _distanceUnitPref,
+          'updated_at': DateTime.now().toIso8601String(),
         },
         where: 'name = ?',
         whereArgs: [_profileName],

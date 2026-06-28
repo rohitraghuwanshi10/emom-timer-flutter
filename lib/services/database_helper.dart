@@ -112,7 +112,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 11,
+        version: 12,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -225,6 +225,13 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for profiles distance_unit_pref: $e');
             }
           }
+          if (oldVersion < 12) {
+            try {
+              await db.execute("ALTER TABLE profiles ADD COLUMN updated_at TEXT");
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for profiles updated_at: $e');
+            }
+          }
         },
       ),
     );
@@ -248,7 +255,8 @@ class DatabaseHelper {
           treadmill_enabled INTEGER DEFAULT 0,
           treadmill_preset_1 REAL DEFAULT 2.0,
           treadmill_preset_2 REAL DEFAULT 4.0,
-          treadmill_preset_3 REAL DEFAULT 6.0
+          treadmill_preset_3 REAL DEFAULT 6.0,
+          updated_at TEXT
       )
     ''');
 
@@ -315,10 +323,11 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_hr_logs_workout_id ON heart_rate_logs(workout_id)');
     
     // Create default profile if database is brand new, safely ignoring if it exists
+    final nowStr = DateTime.now().toIso8601String();
     await db.execute('''
-      INSERT OR IGNORE INTO profiles (name, created_at, weight_unit_pref, auto_connect_hr)
-      VALUES ('Default', ?, 'kg', 1)
-    ''', [DateTime.now().toIso8601String()]);
+      INSERT OR IGNORE INTO profiles (name, created_at, weight_unit_pref, auto_connect_hr, updated_at)
+      VALUES ('Default', ?, 'kg', 1, ?)
+    ''', [nowStr, nowStr]);
   }
 
   Future<List<Map<String, dynamic>>> getWorkoutsForDay(String profileName, String dateStr) async {

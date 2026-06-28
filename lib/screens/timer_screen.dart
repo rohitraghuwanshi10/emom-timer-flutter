@@ -2116,6 +2116,7 @@ class _BluetoothDeviceManagerSheetState extends State<BluetoothDeviceManagerShee
             'treadmill_preset_1': TreadmillBluetoothService.instance.speedPresets[0],
             'treadmill_preset_2': TreadmillBluetoothService.instance.speedPresets[1],
             'treadmill_preset_3': TreadmillBluetoothService.instance.speedPresets[2],
+            'updated_at': DateTime.now().toIso8601String(),
           },
           where: 'name = ?',
           whereArgs: [activeProfile],
