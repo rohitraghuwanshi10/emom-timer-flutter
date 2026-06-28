@@ -23,6 +23,10 @@ class ProfileScreenState extends State<ProfileScreen> {
   bool _saveHistory = true;
   String? _sex;
   String? _birthDate;
+  bool _treadmillEnabled = false;
+  double _preset1 = 2.0;
+  double _preset2 = 4.0;
+  double _preset3 = 6.0;
 
   Future<void> _triggerSync() async {
     final success = await SyncService.instance.signInAndSync();
@@ -86,6 +90,10 @@ class ProfileScreenState extends State<ProfileScreen> {
           _saveHistory = (profile['save_history'] as int? ?? 1) == 1;
           _sex = profile['sex'] as String?;
           _birthDate = profile['birth_date'] as String?;
+          _treadmillEnabled = (profile['treadmill_enabled'] as int? ?? 0) == 1;
+          _preset1 = (profile['treadmill_preset_1'] as num?)?.toDouble() ?? 2.0;
+          _preset2 = (profile['treadmill_preset_2'] as num?)?.toDouble() ?? 4.0;
+          _preset3 = (profile['treadmill_preset_3'] as num?)?.toDouble() ?? 6.0;
         });
       }
     } catch (e) {
@@ -108,6 +116,10 @@ class ProfileScreenState extends State<ProfileScreen> {
           'save_history': _saveHistory ? 1 : 0,
           'sex': _sex,
           'birth_date': _birthDate,
+          'treadmill_enabled': _treadmillEnabled ? 1 : 0,
+          'treadmill_preset_1': _preset1,
+          'treadmill_preset_2': _preset2,
+          'treadmill_preset_3': _preset3,
         },
         where: 'name = ?',
         whereArgs: [_profileName],
@@ -407,6 +419,32 @@ class ProfileScreenState extends State<ProfileScreen> {
               value: _healthEnabled,
               onChanged: _onHealthToggled,
             ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('WalkingPad Integration'),
+              subtitle: const Text('Enable KingSmith R1S WalkingPad treadmill integration and automatic speed control.'),
+              value: _treadmillEnabled,
+              onChanged: (val) async {
+                setState(() {
+                  _treadmillEnabled = val;
+                });
+                await _saveProfile(showFeedback: false);
+              },
+            ),
+            if (_treadmillEnabled) ...[
+              const SizedBox(height: 16),
+              const Text('Treadmill Speed Presets', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: _buildPresetField('Preset 1', _preset1, (val) => setState(() => _preset1 = val))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildPresetField('Preset 2', _preset2, (val) => setState(() => _preset2 = val))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildPresetField('Preset 3', _preset3, (val) => setState(() => _preset3 = val))),
+                ],
+              ),
+            ],
             const SizedBox(height: 32),
             const Text('Cloud Sync', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 16),
@@ -434,6 +472,36 @@ class ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPresetField(String label, double value, ValueChanged<double> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 4),
+        DropdownButton<double>(
+          value: value,
+          isExpanded: true,
+          underline: Container(
+            height: 1,
+            color: Colors.grey.withValues(alpha: 0.5),
+          ),
+          items: List.generate(96, (index) => 0.5 + index * 0.1)
+              .map((val) => DropdownMenuItem<double>(
+                    value: double.parse(val.toStringAsFixed(1)),
+                    child: Text('${val.toStringAsFixed(1)} km/h', style: const TextStyle(fontSize: 13)),
+                  ))
+              .toList(),
+          onChanged: (val) async {
+            if (val != null) {
+              onChanged(val);
+              await _saveProfile(showFeedback: false);
+            }
+          },
+        ),
+      ],
     );
   }
 }

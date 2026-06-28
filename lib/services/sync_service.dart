@@ -98,6 +98,10 @@ class SyncService extends ChangeNotifier {
         'weight_unit_pref': local['weight_unit_pref'],
         'auto_connect_hr': local['auto_connect_hr'],
         'save_history': local['save_history'] ?? 1,
+        'treadmill_enabled': local['treadmill_enabled'] ?? 0,
+        'treadmill_preset_1': local['treadmill_preset_1'] ?? 2.0,
+        'treadmill_preset_2': local['treadmill_preset_2'] ?? 4.0,
+        'treadmill_preset_3': local['treadmill_preset_3'] ?? 6.0,
       }, SetOptions(merge: true));
     }
 
@@ -120,6 +124,10 @@ class SyncService extends ChangeNotifier {
           'weight_unit_pref': data['weight_unit_pref'],
           'auto_connect_hr': data['auto_connect_hr'],
           'save_history': data['save_history'] ?? 1,
+          'treadmill_enabled': data['treadmill_enabled'] ?? 0,
+          'treadmill_preset_1': data['treadmill_preset_1'] ?? 2.0,
+          'treadmill_preset_2': data['treadmill_preset_2'] ?? 4.0,
+          'treadmill_preset_3': data['treadmill_preset_3'] ?? 6.0,
         });
         debugPrint('SyncService: Downloaded profile $name');
       } else {
@@ -135,6 +143,18 @@ class SyncService extends ChangeNotifier {
         };
         if (data.containsKey('save_history')) {
           updateData['save_history'] = data['save_history'] ?? 1;
+        }
+        if (data.containsKey('treadmill_enabled')) {
+          updateData['treadmill_enabled'] = data['treadmill_enabled'] ?? 0;
+        }
+        if (data.containsKey('treadmill_preset_1')) {
+          updateData['treadmill_preset_1'] = data['treadmill_preset_1'] ?? 2.0;
+        }
+        if (data.containsKey('treadmill_preset_2')) {
+          updateData['treadmill_preset_2'] = data['treadmill_preset_2'] ?? 4.0;
+        }
+        if (data.containsKey('treadmill_preset_3')) {
+          updateData['treadmill_preset_3'] = data['treadmill_preset_3'] ?? 6.0;
         }
         await db.update('profiles', updateData, where: 'name = ?', whereArgs: [name]);
       }
@@ -163,6 +183,9 @@ class SyncService extends ChangeNotifier {
         'continuous_mode': local['continuous_mode'] ?? 0,
         'activity_type': local['activity_type'] ?? 'HIIT',
         'auto_regulate': local['auto_regulate'] ?? 1,
+        'treadmill_workout': local['treadmill_workout'] ?? 0,
+        'work_speed': local['work_speed'] ?? 4.0,
+        'rest_speed': local['rest_speed'] ?? 0.0,
       }, SetOptions(merge: true));
     }
 
@@ -185,6 +208,9 @@ class SyncService extends ChangeNotifier {
           'continuous_mode': data['continuous_mode'] ?? 0,
           'activity_type': data['activity_type'] ?? 'HIIT',
           'auto_regulate': data['auto_regulate'] ?? 1,
+          'treadmill_workout': data['treadmill_workout'] ?? 0,
+          'work_speed': data['work_speed'] ?? 4.0,
+          'rest_speed': data['rest_speed'] ?? 0.0,
         });
         debugPrint('SyncService: Downloaded template $tName for profile $pName');
       } else {
@@ -203,6 +229,15 @@ class SyncService extends ChangeNotifier {
         }
         if (data.containsKey('auto_regulate')) {
           updateMap['auto_regulate'] = data['auto_regulate'] ?? 1;
+        }
+        if (data.containsKey('treadmill_workout')) {
+          updateMap['treadmill_workout'] = data['treadmill_workout'] ?? 0;
+        }
+        if (data.containsKey('work_speed')) {
+          updateMap['work_speed'] = data['work_speed'] ?? 4.0;
+        }
+        if (data.containsKey('rest_speed')) {
+          updateMap['rest_speed'] = data['rest_speed'] ?? 0.0;
         }
         await db.update('workout_templates', updateMap,
             where: 'profile_name = ? AND template_name = ?',

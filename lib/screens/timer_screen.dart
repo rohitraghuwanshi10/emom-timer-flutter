@@ -8,6 +8,7 @@ import '../services/database_helper.dart';
 import '../services/sync_service.dart';
 import '../services/health_service.dart';
 import '../services/watch_connectivity_service.dart';
+import '../services/treadmill_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -24,6 +25,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   StreamSubscription? _hrSubscription;
   StreamSubscription? _watchSubscription;
   StreamSubscription? _btStateSubscription;
+  StreamSubscription? _treadmillConnectionSubscription;
+  StreamSubscription? _treadmillStatusSubscription;
+  StreamSubscription? _treadmillScanningSubscription;
   late AnimationController _progressController;
 
   int _workDuration = 60;
@@ -37,6 +41,11 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   
   int _currentHr = 0;
   bool _isBluetoothConnected = false;
+  
+  BluetoothConnectionState _treadmillConnectionState = BluetoothConnectionState.disconnected;
+  TreadmillStatus? _treadmillStatus;
+  bool _isTreadmillScanning = false;
+  WorkoutState? _lastProcessedTreadmillState;
 
   WorkoutEvent _currentEvent = WorkoutEvent(
     state: WorkoutState.IDLE,
@@ -52,6 +61,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   String? _loadedTemplateName;
   Map<String, dynamic>? _loadedTemplate;
   String _activityType = 'HIIT';
+  bool _treadmillWorkout = false;
 
   bool get _isTemplateModified {
     if (_loadedTemplate == null) return false;
@@ -59,13 +69,21 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     final autoRegulateModified = _isBluetoothConnected
         ? _autoRegulationEnabled != templateAutoRegulate
         : false;
+    final templateTreadmillWorkout = (_loadedTemplate!['treadmill_workout'] as int? ?? 0) == 1;
+    final templateWorkSpeed = (_loadedTemplate!['work_speed'] as num?)?.toDouble() ?? 4.0;
+    final templateRestSpeed = (_loadedTemplate!['rest_speed'] as num?)?.toDouble() ?? 0.0;
+    final treadmillModified = _treadmillWorkout != templateTreadmillWorkout ||
+        TreadmillBluetoothService.instance.workSpeed != templateWorkSpeed ||
+        TreadmillBluetoothService.instance.restSpeed != templateRestSpeed;
+
     return _totalRounds != _loadedTemplate!['rounds'] ||
         _workDuration != _loadedTemplate!['work_time'] ||
         _restDuration != _loadedTemplate!['rest_time'] ||
         _notesController.text != (_loadedTemplate!['notes'] ?? '') ||
         _continuousMode != ((_loadedTemplate!['continuous_mode'] as int? ?? 0) == 1) ||
         _activityType != (_loadedTemplate!['activity_type'] ?? 'HIIT') ||
-        autoRegulateModified;
+        autoRegulateModified ||
+        treadmillModified;
   }
   
   // Cache variables for calorie/zone calculations
@@ -86,6 +104,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     AudioService.instance; // Force lazy-init to eagerly preload audio assets
     loadProfileSettings();
     _setupBluetooth();
+    _setupTreadmill();
   }
 
   Future<void> loadProfileSettings() async {
@@ -111,6 +130,12 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
             _healthEnabled = (profile['health_enabled'] as int? ?? 0) == 1;
             _saveHistoryEnabled = (profile['save_history'] as int? ?? 1) == 1;
             
+            TreadmillBluetoothService.instance.treadmillEnabled = (profile['treadmill_enabled'] as int? ?? 0) == 1;
+            final p1 = (profile['treadmill_preset_1'] as num?)?.toDouble() ?? 2.0;
+            final p2 = (profile['treadmill_preset_2'] as num?)?.toDouble() ?? 4.0;
+            final p3 = (profile['treadmill_preset_3'] as num?)?.toDouble() ?? 6.0;
+            TreadmillBluetoothService.instance.speedPresets = [p1, p2, p3];
+
             // Auto-check if Bluetooth is connected and maxPreworkHr is configured
             if (_isBluetoothConnected) {
               final templateAutoRegulate = _loadedTemplate == null || (_loadedTemplate!['auto_regulate'] as int? ?? 1) == 1;
@@ -149,6 +174,11 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         _loadedTemplateName = template['template_name'] as String?;
         _loadedTemplate = template;
         _autoRegulationEnabled = (template['auto_regulate'] as int? ?? 1) == 1 && _isBluetoothConnected && _maxPreworkHr > 0;
+        _treadmillWorkout = (template['treadmill_workout'] as int? ?? 0) == 1;
+        if (_treadmillWorkout) {
+          TreadmillBluetoothService.instance.workSpeed = (template['work_speed'] as num?)?.toDouble() ?? 4.0;
+          TreadmillBluetoothService.instance.restSpeed = (template['rest_speed'] as num?)?.toDouble() ?? 0.0;
+        }
       });
       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
     }
@@ -186,6 +216,36 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     });
   }
 
+  void _setupTreadmill() {
+    _treadmillConnectionState = TreadmillBluetoothService.instance.connectionState;
+    _treadmillStatus = TreadmillBluetoothService.instance.lastStatus;
+    _isTreadmillScanning = TreadmillBluetoothService.instance.isScanning;
+
+    _treadmillConnectionSubscription = TreadmillBluetoothService.instance.connectionStateStream.listen((state) {
+      if (mounted) {
+        setState(() {
+          _treadmillConnectionState = state;
+        });
+      }
+    });
+
+    _treadmillStatusSubscription = TreadmillBluetoothService.instance.statusStream.listen((status) {
+      if (mounted) {
+        setState(() {
+          _treadmillStatus = status;
+        });
+      }
+    });
+
+    _treadmillScanningSubscription = TreadmillBluetoothService.instance.scanningStream.listen((scanning) {
+      if (mounted) {
+        setState(() {
+          _isTreadmillScanning = scanning;
+        });
+      }
+    });
+  }
+
   void _startWorkout() {
     if (_engine != null && _currentEvent.state != WorkoutState.IDLE && _currentEvent.state != WorkoutState.FINISHED) return;
 
@@ -215,6 +275,34 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       if (event.state == WorkoutState.FINISHED) {
         _saveWorkoutToDb();
         _resetToIdle();
+        if (TreadmillBluetoothService.instance.treadmillEnabled &&
+            _treadmillWorkout &&
+            TreadmillBluetoothService.instance.autoSpeedSync &&
+            TreadmillBluetoothService.instance.isConnected) {
+          TreadmillBluetoothService.instance.stop();
+        }
+      }
+
+      // Auto Speed Sync control logic
+      if (TreadmillBluetoothService.instance.treadmillEnabled &&
+          _treadmillWorkout &&
+          TreadmillBluetoothService.instance.autoSpeedSync &&
+          TreadmillBluetoothService.instance.isConnected) {
+        if (event.state != _lastProcessedTreadmillState) {
+          _lastProcessedTreadmillState = event.state;
+
+          if (event.state == WorkoutState.WORK) {
+            TreadmillBluetoothService.instance.startAndSetSpeed(TreadmillBluetoothService.instance.workSpeed);
+          } else if (event.state == WorkoutState.REST) {
+            TreadmillBluetoothService.instance.setSpeed(TreadmillBluetoothService.instance.restSpeed);
+          } else if (event.state == WorkoutState.PAUSED) {
+            TreadmillBluetoothService.instance.stop();
+          } else if (event.state == WorkoutState.PREP && event.timeRemaining == 3) {
+            // Pre-start treadmill 3s before WORK starts so it is fully spun up on WORK phase chime
+            TreadmillBluetoothService.instance.setMode(1);
+            TreadmillBluetoothService.instance.start();
+          }
+        }
       }
       
       // Play sounds on transitions
@@ -277,6 +365,11 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     WakelockPlus.disable(); // Allow screen to sleep after workout is done
     _engine?.dispose();
     _engine = null;
+    _lastProcessedTreadmillState = null;
+    if (TreadmillBluetoothService.instance.treadmillEnabled &&
+        TreadmillBluetoothService.instance.isConnected) {
+      TreadmillBluetoothService.instance.stop();
+    }
     setState(() {
       _currentEvent = WorkoutEvent(
         state: WorkoutState.IDLE,
@@ -298,6 +391,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     _watchSubscription?.cancel();
     WatchConnectivityService.instance.stopListening();
     _btStateSubscription?.cancel();
+    _treadmillConnectionSubscription?.cancel();
+    _treadmillStatusSubscription?.cancel();
+    _treadmillScanningSubscription?.cancel();
     _engine?.dispose();
     super.dispose();
   }
@@ -589,6 +685,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     'continuous_mode': _continuousMode ? 1 : 0,
                     'activity_type': _activityType,
                     'auto_regulate': autoRegulateToSave,
+                    'treadmill_workout': _treadmillWorkout ? 1 : 0,
+                    'work_speed': TreadmillBluetoothService.instance.workSpeed,
+                    'rest_speed': TreadmillBluetoothService.instance.restSpeed,
                   }, conflictAlgorithm: ConflictAlgorithm.replace);
                   if (context.mounted) {
                     Navigator.pop(context);
@@ -843,6 +942,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                   setState(() {
                     _loadedTemplateName = null;
                     _loadedTemplate = null;
+                    _treadmillWorkout = false;
                     _autoRegulationEnabled = _isBluetoothConnected && _maxPreworkHr > 0;
                   });
                 },
@@ -1198,6 +1298,116 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                 ),
               ],
             ),
+            if (TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout) ...[
+              // WalkingPad Treadmill Configurations
+              const Divider(),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                  child: Text(
+                    'WalkingPad Treadmill',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey),
+                  ),
+                ),
+              ),
+              SwitchListTile(
+                title: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Auto Speed Sync'),
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _showHelpDialog(
+                        'Auto Speed Sync',
+                        'Automatically controls the treadmill speed based on your workout interval. On WORK, it starts the belt and ramps up to Work Speed. On REST, it slows down to Rest Speed (or stops the belt). On PAUSE/END, it stops the belt.',
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: Icon(
+                          Icons.help_outline,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                subtitle: Text(
+                  _treadmillConnectionState == BluetoothConnectionState.connected
+                      ? 'Connected and ready'
+                      : 'Treadmill not connected (auto-sync will activate upon connection)',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                value: TreadmillBluetoothService.instance.autoSpeedSync,
+                onChanged: (val) => setState(() {
+                      TreadmillBluetoothService.instance.autoSpeedSync = val;
+                    }),
+              ),
+              if (TreadmillBluetoothService.instance.autoSpeedSync) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Column(
+                    children: [
+                      // Work Speed Slider
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Work Phase Speed'),
+                          Text(
+                            '${TreadmillBluetoothService.instance.workSpeed.toStringAsFixed(1)} km/h',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Slider(
+                        value: TreadmillBluetoothService.instance.workSpeed,
+                        min: 0.5,
+                        max: 10.0,
+                        divisions: 95, // 0.5 to 10.0 is 9.5 units, so 95 steps of 0.1
+                        label: '${TreadmillBluetoothService.instance.workSpeed.toStringAsFixed(1)} km/h',
+                        onChanged: (val) => setState(() {
+                          TreadmillBluetoothService.instance.workSpeed = val;
+                        }),
+                      ),
+                      const SizedBox(height: 8),
+                      // Rest Speed Slider
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Rest Phase Speed'),
+                          Text(
+                            TreadmillBluetoothService.instance.restSpeed == 0.0
+                                ? 'Stop (0.0 km/h)'
+                                : '${TreadmillBluetoothService.instance.restSpeed.toStringAsFixed(1)} km/h',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.secondary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Slider(
+                        value: TreadmillBluetoothService.instance.restSpeed,
+                        min: 0.0,
+                        max: 10.0,
+                        divisions: 100, // 0.0 to 10.0 is 10.0 units, so 100 steps of 0.1
+                        label: TreadmillBluetoothService.instance.restSpeed == 0.0
+                            ? 'Stop'
+                            : '${TreadmillBluetoothService.instance.restSpeed.toStringAsFixed(1)} km/h',
+                        onChanged: (val) => setState(() {
+                          TreadmillBluetoothService.instance.restSpeed = val;
+                        }),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
             const SizedBox(height: 8),
             TextField(
               controller: _notesController,
@@ -1408,16 +1618,14 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           _buildProfileSelectorAction(isIdle),
           IconButton(
             icon: Icon(
-              _isBluetoothConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-              color: _isBluetoothConnected ? Theme.of(context).colorScheme.primary : Colors.grey,
+              (_isBluetoothConnected || _treadmillConnectionState == BluetoothConnectionState.connected)
+                  ? Icons.bluetooth_connected
+                  : Icons.bluetooth_disabled,
+              color: (_isBluetoothConnected || _treadmillConnectionState == BluetoothConnectionState.connected)
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.grey,
             ),
-            onPressed: () {
-              if (!_isBluetoothConnected) {
-                AppBluetoothService.instance.startScanAndConnect();
-              } else {
-                AppBluetoothService.instance.disconnect();
-              }
-            },
+            onPressed: _showBluetoothDeviceManager,
           ),
         ],
       ),
@@ -1463,6 +1671,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               _buildTimerDisplay(),
               const SizedBox(height: 24),
               _buildLiveHeartRateDisplay(),
+              const SizedBox(height: 24),
+              _buildLiveTreadmillTelemetry(),
               const SizedBox(height: 24),
               if (isIdle) _buildConfigPanel(),
             ],
@@ -1524,6 +1734,615 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               ],
             ),
     );
+  }
+
+  void _showBluetoothDeviceManager() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return const BluetoothDeviceManagerSheet();
+      },
+    );
+  }
+
+  Widget _buildLiveTreadmillTelemetry() {
+    final bool isEnabled = TreadmillBluetoothService.instance.treadmillEnabled;
+    final bool isConnected = _treadmillConnectionState == BluetoothConnectionState.connected;
+    if (!isEnabled || !isConnected || !_treadmillWorkout) return const SizedBox.shrink();
+
+    final status = _treadmillStatus;
+    final speed = status?.speed ?? 0.0;
+    final dist = status?.distance ?? 0.0;
+    final time = status?.time ?? 0;
+    final steps = status?.steps ?? 0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: Card(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.directions_run, color: Theme.of(context).colorScheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'WalkingPad Telemetry',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildTelemetryItem(
+                    label: 'Speed',
+                    value: '${speed.toStringAsFixed(1)} km/h',
+                    icon: Icons.speed,
+                  ),
+                  _buildTelemetryItem(
+                    label: 'Distance',
+                    value: '${dist.toStringAsFixed(2)} km',
+                    icon: Icons.map,
+                  ),
+                  _buildTelemetryItem(
+                    label: 'Time',
+                    value: _formatDuration(time),
+                    icon: Icons.timer,
+                  ),
+                  _buildTelemetryItem(
+                    label: 'Steps',
+                    value: '$steps',
+                    icon: Icons.nordic_walking,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTelemetryItem({required String label, required String value, required IconData icon}) {
+    return Column(
+      children: [
+        Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class BluetoothDeviceManagerSheet extends StatefulWidget {
+  const BluetoothDeviceManagerSheet({super.key});
+
+  @override
+  State<BluetoothDeviceManagerSheet> createState() => _BluetoothDeviceManagerSheetState();
+}
+
+class _BluetoothDeviceManagerSheetState extends State<BluetoothDeviceManagerSheet> {
+  StreamSubscription? _hrStateSub;
+  StreamSubscription? _hrValueSub;
+  StreamSubscription? _treadmillStateSub;
+  StreamSubscription? _treadmillStatusSub;
+  StreamSubscription? _treadmillScanSub;
+  StreamSubscription? _hrScanSub;
+
+  BluetoothConnectionState _hrState = BluetoothConnectionState.disconnected;
+  int _hrValue = 0;
+  BluetoothConnectionState _treadmillState = BluetoothConnectionState.disconnected;
+  TreadmillStatus? _treadmillStatus;
+  bool _isTreadmillScanning = false;
+  bool _isHrScanning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _hrState = AppBluetoothService.instance.isConnected ? BluetoothConnectionState.connected : BluetoothConnectionState.disconnected;
+    _treadmillState = TreadmillBluetoothService.instance.connectionState;
+    _treadmillStatus = TreadmillBluetoothService.instance.lastStatus;
+    _isTreadmillScanning = TreadmillBluetoothService.instance.isScanning;
+
+    _hrStateSub = AppBluetoothService.instance.deviceStateStream.listen((state) {
+      if (mounted) setState(() => _hrState = state);
+    });
+    _hrValueSub = AppBluetoothService.instance.heartRateStream.listen((hr) {
+      if (mounted) setState(() => _hrValue = hr);
+    });
+
+    _treadmillStateSub = TreadmillBluetoothService.instance.connectionStateStream.listen((state) {
+      if (mounted) setState(() => _treadmillState = state);
+    });
+    _treadmillStatusSub = TreadmillBluetoothService.instance.statusStream.listen((status) {
+      if (mounted) setState(() => _treadmillStatus = status);
+    });
+    _treadmillScanSub = TreadmillBluetoothService.instance.scanningStream.listen((scanning) {
+      if (mounted) setState(() => _isTreadmillScanning = scanning);
+    });
+
+    _hrScanSub = FlutterBluePlus.isScanning.listen((scanning) {
+      if (mounted) setState(() => _isHrScanning = scanning);
+    });
+  }
+
+  @override
+  void dispose() {
+    _hrStateSub?.cancel();
+    _hrValueSub?.cancel();
+    _treadmillStateSub?.cancel();
+    _treadmillStatusSub?.cancel();
+    _treadmillScanSub?.cancel();
+    _hrScanSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hrConnected = _hrState == BluetoothConnectionState.connected;
+    final tmConnected = _treadmillState == BluetoothConnectionState.connected;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Drag Handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Device Connection Manager',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // Card 1: Heart Rate Monitor
+          Card(
+            color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.5),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: hrConnected 
+                    ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)
+                    : Colors.grey.withValues(alpha: 0.1),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.favorite,
+                        color: hrConnected ? Colors.redAccent : Colors.grey,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Heart Rate Monitor',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              hrConnected 
+                                  ? 'Connected (${_hrValue > 0 ? '$_hrValue BPM' : '-- BPM'})'
+                                  : (_isHrScanning ? 'Scanning...' : 'Disconnected'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: hrConnected 
+                                    ? Theme.of(context).colorScheme.primary 
+                                    : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: hrConnected 
+                              ? Theme.of(context).colorScheme.error.withValues(alpha: 0.15)
+                              : Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                          foregroundColor: hrConnected 
+                              ? Theme.of(context).colorScheme.error 
+                              : Theme.of(context).colorScheme.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: () {
+                          if (hrConnected) {
+                            AppBluetoothService.instance.disconnect();
+                          } else {
+                            AppBluetoothService.instance.startScanAndConnect();
+                          }
+                        },
+                        child: Text(hrConnected ? 'Disconnect' : 'Connect'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          if (TreadmillBluetoothService.instance.treadmillEnabled) ...[
+            const SizedBox(height: 16),
+
+            // Card 2: Kingsmith Treadmill
+            Card(
+              color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: tmConnected 
+                      ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)
+                      : Colors.grey.withValues(alpha: 0.1),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.directions_run,
+                          color: tmConnected ? Theme.of(context).colorScheme.primary : Colors.grey,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'WalkingPad Treadmill',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                tmConnected 
+                                    ? 'Connected'
+                                    : (_isTreadmillScanning ? 'Scanning...' : 'Disconnected'),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: tmConnected 
+                                      ? Theme.of(context).colorScheme.primary 
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: tmConnected 
+                                ? Theme.of(context).colorScheme.error.withValues(alpha: 0.15)
+                                : Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                            foregroundColor: tmConnected 
+                                ? Theme.of(context).colorScheme.error 
+                                : Theme.of(context).colorScheme.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            elevation: 0,
+                          ),
+                          onPressed: () {
+                            if (tmConnected) {
+                              TreadmillBluetoothService.instance.disconnect();
+                            } else {
+                              TreadmillBluetoothService.instance.startScan();
+                            }
+                          },
+                          child: Text(tmConnected ? 'Disconnect' : 'Connect'),
+                        ),
+                      ],
+                    ),
+                    
+                    if (tmConnected) ...[
+                      const Divider(height: 24),
+                      // Telemetry Grid
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildStatItem('Speed', '${_treadmillStatus?.speed.toStringAsFixed(1) ?? "0.0"} km/h'),
+                          _buildStatItem('Distance', '${_treadmillStatus?.distance.toStringAsFixed(2) ?? "0.00"} km'),
+                          _buildStatItem('Time', _formatDuration(_treadmillStatus?.time ?? 0)),
+                          _buildStatItem('Steps', '${_treadmillStatus?.steps ?? 0}'),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Modes Selection Row (standby = 2, manual = 1, auto = 0)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildModeChip('Standby', 2),
+                          const SizedBox(width: 8),
+                          _buildModeChip('Manual', 1),
+                          const SizedBox(width: 8),
+                          _buildModeChip('Automatic', 0),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Controls Row (Speed up, Speed down, Start, Stop)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          // Decrease Speed Button
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.remove),
+                            onPressed: () {
+                              if (_treadmillStatus != null) {
+                                TreadmillBluetoothService.instance.setSpeed(_treadmillStatus!.speed - 0.5);
+                              }
+                            },
+                          ),
+                          
+                          // Play/Pause Button
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              final state = _treadmillStatus?.beltState;
+                              if (state == 1 || state == 2) {
+                                TreadmillBluetoothService.instance.stop();
+                              } else {
+                                TreadmillBluetoothService.instance.start();
+                              }
+                            },
+                            icon: Icon(
+                              (_treadmillStatus?.beltState == 1 || _treadmillStatus?.beltState == 2)
+                                  ? Icons.stop
+                                  : Icons.play_arrow,
+                            ),
+                            label: Text(
+                              (_treadmillStatus?.beltState == 1 || _treadmillStatus?.beltState == 2)
+                                  ? 'Stop Belt'
+                                  : 'Start Belt',
+                            ),
+                          ),
+                          
+                          // Increase Speed Button
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.add),
+                            onPressed: () {
+                              if (_treadmillStatus != null) {
+                                TreadmillBluetoothService.instance.setSpeed(_treadmillStatus!.speed + 0.5);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      // Helper text for custom presets
+                      Text(
+                        'Tap to set speed • Long-press to edit preset',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Presets Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildPresetChip(0),
+                          const SizedBox(width: 8),
+                          _buildPresetChip(1),
+                          const SizedBox(width: 8),
+                          _buildPresetChip(2),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editPresetSpeed(int index) async {
+    final currentSpeed = TreadmillBluetoothService.instance.speedPresets[index];
+    double selectedSpeed = currentSpeed;
+
+    final newSpeed = await showDialog<double>(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Customize Speed Preset'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Preset #${index + 1}: ${selectedSpeed.toStringAsFixed(1)} km/h',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 16),
+                  Slider(
+                    value: selectedSpeed,
+                    min: 0.5,
+                    max: 10.0,
+                    divisions: 95, // 0.5 to 10.0 is 9.5 units, so 95 steps of 0.1
+                    label: '${selectedSpeed.toStringAsFixed(1)} km/h',
+                    onChanged: (val) {
+                      setDialogState(() {
+                        selectedSpeed = val;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, selectedSpeed),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (newSpeed != null && mounted) {
+      setState(() {
+        TreadmillBluetoothService.instance.speedPresets[index] = newSpeed;
+      });
+      // Persist to database active profile
+      try {
+        final activeProfile = await DatabaseHelper.instance.getActiveProfileName();
+        final db = await DatabaseHelper.instance.database;
+        await db.update(
+          'profiles',
+          {
+            'treadmill_preset_1': TreadmillBluetoothService.instance.speedPresets[0],
+            'treadmill_preset_2': TreadmillBluetoothService.instance.speedPresets[1],
+            'treadmill_preset_3': TreadmillBluetoothService.instance.speedPresets[2],
+          },
+          where: 'name = ?',
+          whereArgs: [activeProfile],
+        );
+        debugPrint("TreadmillService: Custom speed presets persisted to DB");
+      } catch (e) {
+        debugPrint("TreadmillService: Error persisting custom speed presets to DB: $e");
+      }
+    }
+  }
+
+  Widget _buildPresetChip(int index) {
+    final speed = TreadmillBluetoothService.instance.speedPresets[index];
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => TreadmillBluetoothService.instance.setSpeed(speed),
+        onLongPress: () => _editPresetSpeed(index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Text(
+            '${speed.toStringAsFixed(1)} km/h',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeChip(String label, int mode) {
+    final active = _treadmillStatus?.mode == mode;
+
+    return ChoiceChip(
+      label: Text(label),
+      selected: active,
+      onSelected: (selected) {
+        if (selected) {
+          TreadmillBluetoothService.instance.setMode(mode);
+        }
+      },
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatDuration(int seconds) {
+    final int minutes = seconds ~/ 60;
+    final int remainingSeconds = seconds % 60;
+    return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 }
 

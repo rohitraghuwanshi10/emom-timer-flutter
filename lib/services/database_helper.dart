@@ -112,7 +112,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 7,
+        version: 9,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -162,6 +162,45 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for workout_templates auto_regulate: $e');
             }
           }
+          if (oldVersion < 8) {
+            try {
+              await db.execute('ALTER TABLE profiles ADD COLUMN treadmill_enabled INTEGER DEFAULT 0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for profiles treadmill_enabled: $e');
+            }
+            try {
+              await db.execute('ALTER TABLE profiles ADD COLUMN treadmill_preset_1 REAL DEFAULT 2.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for profiles treadmill_preset_1: $e');
+            }
+            try {
+              await db.execute('ALTER TABLE profiles ADD COLUMN treadmill_preset_2 REAL DEFAULT 4.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for profiles treadmill_preset_2: $e');
+            }
+            try {
+              await db.execute('ALTER TABLE profiles ADD COLUMN treadmill_preset_3 REAL DEFAULT 6.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for profiles treadmill_preset_3: $e');
+            }
+          }
+          if (oldVersion < 9) {
+            try {
+              await db.execute('ALTER TABLE workout_templates ADD COLUMN treadmill_workout INTEGER DEFAULT 0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for workout_templates treadmill_workout: $e');
+            }
+            try {
+              await db.execute('ALTER TABLE workout_templates ADD COLUMN work_speed REAL DEFAULT 4.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for workout_templates work_speed: $e');
+            }
+            try {
+              await db.execute('ALTER TABLE workout_templates ADD COLUMN rest_speed REAL DEFAULT 0.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for workout_templates rest_speed: $e');
+            }
+          }
         },
       ),
     );
@@ -180,7 +219,11 @@ class DatabaseHelper {
           weight_unit_pref TEXT,
           auto_connect_hr INTEGER,
           health_enabled INTEGER DEFAULT 0,
-          save_history INTEGER DEFAULT 1
+          save_history INTEGER DEFAULT 1,
+          treadmill_enabled INTEGER DEFAULT 0,
+          treadmill_preset_1 REAL DEFAULT 2.0,
+          treadmill_preset_2 REAL DEFAULT 4.0,
+          treadmill_preset_3 REAL DEFAULT 6.0
       )
     ''');
 
@@ -196,6 +239,9 @@ class DatabaseHelper {
           continuous_mode INTEGER DEFAULT 0,
           activity_type TEXT DEFAULT 'HIIT',
           auto_regulate INTEGER DEFAULT 1,
+          treadmill_workout INTEGER DEFAULT 0,
+          work_speed REAL DEFAULT 4.0,
+          rest_speed REAL DEFAULT 0.0,
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE,
           UNIQUE(profile_name, template_name)
       )

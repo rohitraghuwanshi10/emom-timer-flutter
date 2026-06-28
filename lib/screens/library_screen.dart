@@ -362,6 +362,9 @@ class LibraryScreenState extends State<LibraryScreen> {
     bool continuous = isEditing ? (template['continuous_mode'] as int? ?? 0) == 1 : false;
     String activityType = isEditing ? template['activity_type'] as String? ?? 'HIIT' : 'HIIT';
     bool autoRegulate = isEditing ? (template['auto_regulate'] as int? ?? 1) == 1 : true;
+    bool treadmillWorkout = isEditing ? (template['treadmill_workout'] as int? ?? 0) == 1 : false;
+    double workSpeed = isEditing ? (template['work_speed'] as num?)?.toDouble() ?? 4.0 : 4.0;
+    double restSpeed = isEditing ? (template['rest_speed'] as num?)?.toDouble() ?? 0.0 : 0.0;
 
     showModalBottomSheet(
       context: context,
@@ -584,6 +587,64 @@ class LibraryScreenState extends State<LibraryScreen> {
                       },
                       contentPadding: EdgeInsets.zero,
                     ),
+                    // Treadmill Workout Checkbox/Switch
+                    SwitchListTile(
+                      title: const Text('Treadmill Workout'),
+                      subtitle: const Text('Check this if the workout is treadmill related'),
+                      value: treadmillWorkout,
+                      onChanged: (val) {
+                        setModalState(() {
+                          treadmillWorkout = val;
+                        });
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    if (treadmillWorkout) ...[
+                      const SizedBox(height: 8),
+                      // Work Speed Slider for Template
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Treadmill Work Speed', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text('${workSpeed.toStringAsFixed(1)} km/h',
+                              style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      Slider(
+                        value: workSpeed,
+                        min: 0.5,
+                        max: 10.0,
+                        divisions: 95,
+                        label: '${workSpeed.toStringAsFixed(1)} km/h',
+                        onChanged: (val) {
+                          setModalState(() {
+                            workSpeed = val;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      // Rest Speed Slider for Template
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Treadmill Rest Speed', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(restSpeed == 0.0 ? 'Stop (0.0 km/h)' : '${restSpeed.toStringAsFixed(1)} km/h',
+                              style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      Slider(
+                        value: restSpeed,
+                        min: 0.0,
+                        max: 10.0,
+                        divisions: 100,
+                        label: restSpeed == 0.0 ? 'Stop' : '${restSpeed.toStringAsFixed(1)} km/h',
+                        onChanged: (val) {
+                          setModalState(() {
+                            restSpeed = val;
+                          });
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     TextField(
                       controller: notesController,
@@ -626,6 +687,9 @@ class LibraryScreenState extends State<LibraryScreen> {
                                 'continuous_mode': continuous ? 1 : 0,
                                 'activity_type': activityType,
                                 'auto_regulate': autoRegulate ? 1 : 0,
+                                'treadmill_workout': treadmillWorkout ? 1 : 0,
+                                'work_speed': workSpeed,
+                                'rest_speed': restSpeed,
                               },
                               where: 'id = ?',
                               whereArgs: [template['id']],
@@ -648,6 +712,9 @@ class LibraryScreenState extends State<LibraryScreen> {
                                 'continuous_mode': continuous ? 1 : 0,
                                 'activity_type': activityType,
                                 'auto_regulate': autoRegulate ? 1 : 0,
+                                'treadmill_workout': treadmillWorkout ? 1 : 0,
+                                'work_speed': workSpeed,
+                                'rest_speed': restSpeed,
                               },
                               conflictAlgorithm: ConflictAlgorithm.replace,
                             );
@@ -882,6 +949,32 @@ class LibraryScreenState extends State<LibraryScreen> {
                                                   'Auto HR',
                                                   style: TextStyle(
                                                     color: Colors.redAccent,
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        if ((t['treadmill_workout'] as int? ?? 0) == 1) ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.cyan.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: Colors.cyan.withValues(alpha: 0.3), width: 1),
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.directions_run, size: 8, color: Colors.cyan),
+                                                SizedBox(width: 2),
+                                                Text(
+                                                  'Treadmill',
+                                                  style: TextStyle(
+                                                    color: Colors.cyan,
                                                     fontSize: 9,
                                                     fontWeight: FontWeight.bold,
                                                   ),
