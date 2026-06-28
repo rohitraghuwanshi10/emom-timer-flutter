@@ -609,5 +609,41 @@ void main() {
 
       await dbV10.close();
     });
+
+    test('Migration from version 10 to 11 adds distance_unit_pref to profiles successfully', () async {
+      final dbPath = (await getDatabasesPath()) + '/migration_v10_to_v11.db';
+      await deleteDatabase(dbPath);
+
+      final db = await openDatabase(
+        dbPath,
+        version: 10,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL
+            )
+          ''');
+        },
+      );
+
+      await db.insert('profiles', {'name': 'Default', 'created_at': '2026-06-20T12:00:00'});
+      await db.close();
+
+      final dbV11 = await openDatabase(
+        dbPath,
+        version: 11,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 11) {
+            await db.execute("ALTER TABLE profiles ADD COLUMN distance_unit_pref TEXT DEFAULT 'km'");
+          }
+        },
+      );
+
+      final profiles = await dbV11.query('profiles');
+      expect(profiles.first['distance_unit_pref'], equals('km'));
+
+      await dbV11.close();
+    });
   });
 }

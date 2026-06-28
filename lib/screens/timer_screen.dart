@@ -2121,6 +2121,7 @@ class _BluetoothDeviceManagerSheetState extends State<BluetoothDeviceManagerShee
           whereArgs: [activeProfile],
         );
         debugPrint("TreadmillService: Custom speed presets persisted to DB");
+        SyncService.instance.signInAndSync();
       } catch (e) {
         debugPrint("TreadmillService: Error persisting custom speed presets to DB: $e");
       }

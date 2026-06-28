@@ -133,6 +133,9 @@ class ProfileScreenState extends State<ProfileScreen> {
           const SnackBar(content: Text('Profile saved successfully!')),
         );
       }
+      
+      // Trigger background sync immediately when profile changes
+      SyncService.instance.signInAndSync();
     } catch (e) {
       debugPrint('Error saving profile: $e');
     }
