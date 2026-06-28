@@ -98,7 +98,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       final StringBuffer csvBuffer = StringBuffer();
       
       // Header row
-      csvBuffer.writeln('Workout,Start Time,Rounds,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),Calories (kcal),Notes');
+      csvBuffer.writeln('Workout,Start Time,Rounds,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),Calories (kcal),Run Dist (km),Run Peak Speed (km/h),Run Avg Speed (km/h),Notes');
 
       for (int i = 0; i < _workouts.length; i++) {
         final w = _workouts[i];
@@ -118,6 +118,9 @@ class _DetailsScreenState extends State<DetailsScreen> {
         final String peakHr = _fmtHr(w['max_hr']);
         final String avgHr = _fmtHr(w['avg_hr']);
         final String calories = (w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--';
+        final String runDist = (w['run_distance'] as num?)?.toStringAsFixed(2) ?? '0.00';
+        final String runPeak = (w['run_peak_speed'] as num?)?.toStringAsFixed(1) ?? '0.0';
+        final String runAvg = (w['run_avg_speed'] as num?)?.toStringAsFixed(1) ?? '0.0';
         
         // Escape notes for CSV
         String notes = w['notes'] as String? ?? '';
@@ -132,7 +135,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
         if (escapedName.contains(',') || escapedName.contains('"') || escapedName.contains('\n') || escapedName.contains('\r')) {
           escapedName = '"${escapedName.replaceAll('"', '""')}"';
         }
-        csvBuffer.writeln('$escapedName,$startStr,$rounds,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$notes');
+        csvBuffer.writeln('$escapedName,$startStr,$rounds,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$runDist,$runPeak,$runAvg,$notes');
       }
 
       // Write to file
@@ -180,7 +183,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
           controller: controller,
           maxLines: 3,
           decoration: const InputDecoration(
-            labelText: 'Notes',
+            hintText: 'Enter notes about your workout...',
             border: OutlineInputBorder(),
           ),
         ),
@@ -237,6 +240,9 @@ class _DetailsScreenState extends State<DetailsScreen> {
           DataColumn(label: Text('Peak HR')),
           DataColumn(label: Text('Avg HR')),
           DataColumn(label: Text('Cals (kcal)')),
+          DataColumn(label: Text('Run Dist')),
+          DataColumn(label: Text('Peak Speed')),
+          DataColumn(label: Text('Avg Speed')),
           DataColumn(label: Text('Notes')),
         ],
         rows: _workouts.asMap().entries.map((e) {
@@ -263,6 +269,9 @@ class _DetailsScreenState extends State<DetailsScreen> {
             DataCell(Text(_fmtHr(w['max_hr']), style: const TextStyle(color: Color(0xFFFF3B30)))), // Neon Red
             DataCell(Text(_fmtHr(w['avg_hr']), style: const TextStyle(color: Color(0xFF38B6FF)))), // Cyan/Blue
             DataCell(Text((w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--', style: const TextStyle(color: Color(0xFFBF5AF2)))), // Neon Purple
+            DataCell(Text(w['run_distance'] != null && (w['run_distance'] as num) > 0 ? "${(w['run_distance'] as num).toStringAsFixed(2)} km" : '--', style: const TextStyle(color: Color(0xFF00E5FF)))),
+            DataCell(Text(w['run_peak_speed'] != null && (w['run_peak_speed'] as num) > 0 ? "${(w['run_peak_speed'] as num).toStringAsFixed(1)} km/h" : '--')),
+            DataCell(Text(w['run_avg_speed'] != null && (w['run_avg_speed'] as num) > 0 ? "${(w['run_avg_speed'] as num).toStringAsFixed(1)} km/h" : '--')),
             DataCell(
               InkWell(
                 onTap: () => _editWorkoutNotes(w),

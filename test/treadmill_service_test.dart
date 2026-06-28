@@ -79,4 +79,51 @@ void main() {
       expect(hasStartCmd, isTrue, reason: "Should send start belt command");
     });
   });
+
+  group('Treadmill Statistics Accumulation Logic', () {
+    test('Calculates accumulated distance resiliently across pauses and resets', () {
+      double accumulatedDistance = 0.0;
+      double lastDistanceSample = -1.0;
+
+      // Mock updates from status stream: 0.0 -> 0.1 -> 0.2 -> Pause -> Reset to 0.0 -> Resume -> 0.1 -> 0.2 -> 0.3
+      final sequence = [0.0, 0.1, 0.2, 0.0, 0.0, 0.1, 0.2, 0.3];
+      for (var dist in sequence) {
+        if (lastDistanceSample < 0) {
+          lastDistanceSample = dist;
+        } else {
+          final diff = dist - lastDistanceSample;
+          if (diff > 0) {
+            accumulatedDistance += diff;
+          }
+          lastDistanceSample = dist;
+        }
+      }
+
+      // Expected calculation:
+      // 0.0 -> 0.1 (+0.1) -> 0.2 (+0.1) -> total = 0.2
+      // 0.2 -> 0.0 (negative, ignored, last sample becomes 0.0)
+      // 0.0 -> 0.0 (0, ignored)
+      // 0.0 -> 0.1 (+0.1) -> 0.2 (+0.1) -> 0.3 (+0.1) -> total = 0.5
+      expect(accumulatedDistance, closeTo(0.5, 0.0001));
+    });
+
+    test('Calculates moving average speed ignoring pauses', () {
+      final speedSamples = <double>[];
+      final rawSamples = [4.0, 0.0, 6.0, 0.0, 5.0];
+
+      for (var speed in rawSamples) {
+        if (speed > 0.0) {
+          speedSamples.add(speed);
+        }
+      }
+
+      final avgSpeed = speedSamples.isNotEmpty
+          ? (speedSamples.reduce((a, b) => a + b) / speedSamples.length)
+          : 0.0;
+
+      // Expected: (4.0 + 6.0 + 5.0) / 3 = 15.0 / 3 = 5.0 km/h
+      expect(avgSpeed, equals(5.0));
+      expect(speedSamples.length, equals(3));
+    });
+  });
 }

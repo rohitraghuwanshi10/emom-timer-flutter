@@ -63,6 +63,18 @@ ChronoPulse Active is a sleek, modern Flutter-based EMOM (Every Minute on the Mi
 - **Biological Characteristics Retrieval**: Automatically imports user biological sex, birth date, and weight from Apple Health to populate active profiles and refine zone/calorie equations.
 - **Activity Category Mapping**: Maps selected workout types (HIIT, Strength, Cardio, Yoga, etc.) directly to Apple HealthKit activity enums.
 
+### 🏃 Kingsmith R1S / R1 Pro Bluetooth LE Treadmill Integration
+- **Global Toggle**: Enable or disable treadmill configurations in your user profile. When disabled, all treadmill UI controls and telemetry remain completely hidden.
+- **Bluetooth Connection Manager**: Access real-time WalkingPad connection statuses and manual controls (Standby, Manual, Auto mode, speed presets) directly inside a unified Bluetooth device selector sheet.
+- **Treadmill-Related Templates**: Library templates can be checked as "treadmill related" to display WalkingPad configs on the setup panel and automatically load preset speeds.
+- **Auto Speed Sync**: App automatically manages the treadmill belt: ramps to target Work Speed on WORK intervals (after a 3-2-1 beep countdown), drops to Rest Speed on REST intervals, and safely stops the belt if the workout is paused, ended, or finished.
+- **Redundant Start Prevention**: Checks active belt status to direct setSpeed commands immediately instead of sending redundant start-toggles that act as stop toggles.
+
+### ⌚ Apple Watch (watchOS) Companion App
+- **Wrist Heart Rate Streaming**: Records real-time heart rate data directly from the wrist sensor during active HealthKit workout sessions.
+- **Real-Time iOS Sync**: Streams heart rate values dynamically to the parent iOS application over Apple's `WatchConnectivity` framework.
+- **Synchronized Workouts**: Synchronizes session start/stop controls across the watch face and the mobile application HUD.
+
 ### 🔄 Bidirectional Firebase Sync
 - **Local SQLite Cache**: Workouts are logged first to local SQLite databases using cross-platform `sqflite` (with FFI support).
 - **Background Sync**: Silent, anonymous authentication syncing profiles, workout templates, and detailed logs automatically to Cloud Firestore.
@@ -85,4 +97,5 @@ ChronoPulse Active is a sleek, modern Flutter-based EMOM (Every Minute on the Mi
 ## 🛠️ Development & Architecture
 
 For details on the codebase architecture, local/remote database schemas, local setup instructions, and testing guidelines, please refer to the **[Developer Documentation](developer.md)**.
+
 

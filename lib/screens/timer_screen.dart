@@ -96,6 +96,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   // Session data
   List<Map<String, dynamic>> _hrDetails = [];
   DateTime? _workoutStartTime;
+  double _treadmillAccumulatedDistance = 0.0;
+  double _lastTreadmillDistanceSample = -1.0;
+  double _treadmillPeakSpeed = 0.0;
+  List<double> _treadmillSpeeds = [];
 
   @override
   void initState() {
@@ -235,6 +239,26 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           _treadmillStatus = status;
         });
       }
+      final state = _currentEvent.state;
+      if (_engine != null && state != WorkoutState.IDLE && state != WorkoutState.FINISHED) {
+        if (_lastTreadmillDistanceSample < 0) {
+          _lastTreadmillDistanceSample = status.distance;
+        } else {
+          final diff = status.distance - _lastTreadmillDistanceSample;
+          if (diff > 0) {
+            _treadmillAccumulatedDistance += diff;
+          }
+          _lastTreadmillDistanceSample = status.distance;
+        }
+
+        if (status.speed > _treadmillPeakSpeed) {
+          _treadmillPeakSpeed = status.speed;
+        }
+
+        if (status.speed > 0.0) {
+          _treadmillSpeeds.add(status.speed);
+        }
+      }
     });
 
     _treadmillScanningSubscription = TreadmillBluetoothService.instance.scanningStream.listen((scanning) {
@@ -255,6 +279,15 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
     _hrDetails = [];
     _workoutStartTime = DateTime.now();
+    _treadmillAccumulatedDistance = 0.0;
+    _lastTreadmillDistanceSample = -1.0;
+    _treadmillPeakSpeed = 0.0;
+    _treadmillSpeeds = [];
+    if (TreadmillBluetoothService.instance.treadmillEnabled &&
+        TreadmillBluetoothService.instance.isConnected &&
+        _treadmillStatus != null) {
+      _lastTreadmillDistanceSample = _treadmillStatus!.distance;
+    }
 
     _engine = WorkoutEngine(
       totalRounds: _totalRounds,
@@ -592,6 +625,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           ? (_isTemplateModified ? '$_loadedTemplateName (Modified)' : _loadedTemplateName)
           : null;
 
+      double avgSpeed = _treadmillSpeeds.isNotEmpty
+          ? (_treadmillSpeeds.reduce((a, b) => a + b) / _treadmillSpeeds.length)
+          : 0.0;
+
       final workoutId = await DatabaseHelper.instance.saveWorkout(
         profileName: _profileName,
         workoutName: workoutName,
@@ -609,6 +646,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         notes: notes,
         hrLogs: _hrDetails,
         activityType: _activityType,
+        runDistance: _treadmillWorkout ? double.parse(_treadmillAccumulatedDistance.toStringAsFixed(2)) : 0.0,
+        runPeakSpeed: _treadmillWorkout ? _treadmillPeakSpeed : 0.0,
+        runAvgSpeed: _treadmillWorkout ? double.parse(avgSpeed.toStringAsFixed(2)) : 0.0,
       );
       
       debugPrint("TimerScreen: _healthEnabled is $_healthEnabled");

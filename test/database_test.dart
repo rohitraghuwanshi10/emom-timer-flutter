@@ -496,5 +496,118 @@ void main() {
 
       await dbV7.close();
     });
+
+    test('Migration from version 7 to 8 adds treadmill profiles fields successfully', () async {
+      final db = await openDatabase(
+        dbPath,
+        version: 7,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL
+            )
+          ''');
+        },
+      );
+
+      await db.insert('profiles', {'name': 'Test User', 'created_at': '2026-06-20'});
+      await db.close();
+
+      final dbV8 = await openDatabase(
+        dbPath,
+        version: 8,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 8) {
+            await db.execute('ALTER TABLE profiles ADD COLUMN treadmill_enabled INTEGER DEFAULT 0');
+            await db.execute('ALTER TABLE profiles ADD COLUMN treadmill_preset_1 REAL DEFAULT 2.0');
+            await db.execute('ALTER TABLE profiles ADD COLUMN treadmill_preset_2 REAL DEFAULT 4.0');
+            await db.execute('ALTER TABLE profiles ADD COLUMN treadmill_preset_3 REAL DEFAULT 6.0');
+          }
+        },
+      );
+
+      final profiles = await dbV8.query('profiles');
+      expect(profiles.first['treadmill_enabled'], equals(0));
+      expect(profiles.first['treadmill_preset_1'], equals(2.0));
+      expect(profiles.first['treadmill_preset_2'], equals(4.0));
+      expect(profiles.first['treadmill_preset_3'], equals(6.0));
+
+      await dbV8.close();
+    });
+
+    test('Migration from version 8 to 9 adds treadmill template fields successfully', () async {
+      final db = await openDatabase(
+        dbPath,
+        version: 8,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workout_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_name TEXT
+            )
+          ''');
+        },
+      );
+
+      await db.insert('workout_templates', {'template_name': 'Sample Temp'});
+      await db.close();
+
+      final dbV9 = await openDatabase(
+        dbPath,
+        version: 9,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 9) {
+            await db.execute('ALTER TABLE workout_templates ADD COLUMN treadmill_workout INTEGER DEFAULT 0');
+            await db.execute('ALTER TABLE workout_templates ADD COLUMN work_speed REAL DEFAULT 4.0');
+            await db.execute('ALTER TABLE workout_templates ADD COLUMN rest_speed REAL DEFAULT 0.0');
+          }
+        },
+      );
+
+      final templates = await dbV9.query('workout_templates');
+      expect(templates.first['treadmill_workout'], equals(0));
+      expect(templates.first['work_speed'], equals(4.0));
+      expect(templates.first['rest_speed'], equals(0.0));
+
+      await dbV9.close();
+    });
+
+    test('Migration from version 9 to 10 adds treadmill workouts fields successfully', () async {
+      final db = await openDatabase(
+        dbPath,
+        version: 9,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                start_time TEXT NOT NULL
+            )
+          ''');
+        },
+      );
+
+      await db.insert('workouts', {'start_time': '2026-06-20T12:00:00'});
+      await db.close();
+
+      final dbV10 = await openDatabase(
+        dbPath,
+        version: 10,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 10) {
+            await db.execute('ALTER TABLE workouts ADD COLUMN run_distance REAL DEFAULT 0.0');
+            await db.execute('ALTER TABLE workouts ADD COLUMN run_peak_speed REAL DEFAULT 0.0');
+            await db.execute('ALTER TABLE workouts ADD COLUMN run_avg_speed REAL DEFAULT 0.0');
+          }
+        },
+      );
+
+      final workouts = await dbV10.query('workouts');
+      expect(workouts.first['run_distance'], equals(0.0));
+      expect(workouts.first['run_peak_speed'], equals(0.0));
+      expect(workouts.first['run_avg_speed'], equals(0.0));
+
+      await dbV10.close();
+    });
   });
 }

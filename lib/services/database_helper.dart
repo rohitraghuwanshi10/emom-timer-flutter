@@ -112,7 +112,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 9,
+        version: 10,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -201,6 +201,23 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for workout_templates rest_speed: $e');
             }
           }
+          if (oldVersion < 10) {
+            try {
+              await db.execute('ALTER TABLE workouts ADD COLUMN run_distance REAL DEFAULT 0.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for workouts run_distance: $e');
+            }
+            try {
+              await db.execute('ALTER TABLE workouts ADD COLUMN run_peak_speed REAL DEFAULT 0.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for workouts run_peak_speed: $e');
+            }
+            try {
+              await db.execute('ALTER TABLE workouts ADD COLUMN run_avg_speed REAL DEFAULT 0.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for workouts run_avg_speed: $e');
+            }
+          }
         },
       ),
     );
@@ -266,6 +283,9 @@ class DatabaseHelper {
           notes TEXT,
           details_file_legacy TEXT,
           activity_type TEXT DEFAULT 'HIIT',
+          run_distance REAL DEFAULT 0.0,
+          run_peak_speed REAL DEFAULT 0.0,
+          run_avg_speed REAL DEFAULT 0.0,
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE
       )
     ''');
@@ -329,6 +349,9 @@ class DatabaseHelper {
     required String notes,
     required List<Map<String, dynamic>> hrLogs,
     String activityType = 'HIIT',
+    double runDistance = 0.0,
+    double runPeakSpeed = 0.0,
+    double runAvgSpeed = 0.0,
   }) async {
     final db = await database;
     try {
@@ -349,6 +372,9 @@ class DatabaseHelper {
           'calories_burnt_kcal': caloriesBurntKcal,
           'notes': notes,
           'activity_type': activityType,
+          'run_distance': runDistance,
+          'run_peak_speed': runPeakSpeed,
+          'run_avg_speed': runAvgSpeed,
         });
 
         for (var log in hrLogs) {

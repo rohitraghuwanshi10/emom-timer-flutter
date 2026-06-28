@@ -296,6 +296,9 @@ class SyncService extends ChangeNotifier {
           'calories_burnt_kcal': w['calories_burnt_kcal'],
           'notes': w['notes'],
           'activity_type': w['activity_type'] ?? 'HIIT',
+          'run_distance': w['run_distance'] ?? 0.0,
+          'run_peak_speed': w['run_peak_speed'] ?? 0.0,
+          'run_avg_speed': w['run_avg_speed'] ?? 0.0,
           'hr_details': hrDataList,
         });
         
@@ -356,6 +359,9 @@ class SyncService extends ChangeNotifier {
             'calories_burnt_kcal': data['calories_burnt_kcal'],
             'notes': data['notes'],
             'activity_type': data['activity_type'] ?? 'HIIT',
+            'run_distance': data['run_distance'] ?? 0.0,
+            'run_peak_speed': data['run_peak_speed'] ?? 0.0,
+            'run_avg_speed': data['run_avg_speed'] ?? 0.0,
           });
           
           final List<dynamic> hrDetails = data['hr_details'] ?? [];
