@@ -1062,7 +1062,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                       return Card(
                         key: ValueKey(t['id']),
                         color: Theme.of(context).colorScheme.surface,
-                        margin: const EdgeInsets.only(bottom: 8),
+                        margin: const EdgeInsets.only(bottom: 6),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
@@ -1071,161 +1071,324 @@ class LibraryScreenState extends State<LibraryScreen> {
                           ),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Row(
-                            children: [
-                              // Left: Title, Stats, and Notes
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: isLandscape ? 4 : 8,
+                          ),
+                          child: isLandscape
+                              ? Row(
                                   children: [
-                                    Text(
-                                      name,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    // Small Activity & Status Badges wrapped responsively
-                                    Wrap(
-                                      spacing: 4,
-                                      runSpacing: 4,
-                                      crossAxisAlignment: WrapCrossAlignment.center,
-                                      children: [
-                                        // Small Activity Badge
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: badgeColor.withValues(alpha: 0.1),
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: badgeColor.withValues(alpha: 0.3), width: 1),
-                                          ),
-                                          child: Text(
-                                            _getActivityName(type),
-                                            style: TextStyle(
-                                              color: badgeColor,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
+                                    // Left: Title + Badges
+                                    Expanded(
+                                      flex: 5,
+                                      child: Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              name,
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          // Badges row
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              // Activity Badge
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: badgeColor.withValues(alpha: 0.1),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  border: Border.all(color: badgeColor.withValues(alpha: 0.3), width: 1),
+                                                ),
+                                                child: Text(
+                                                  _getActivityName(type),
+                                                  style: TextStyle(
+                                                    color: badgeColor,
+                                                    fontSize: 8,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                              if ((t['auto_regulate'] as int? ?? 1) == 1) ...[
+                                                const SizedBox(width: 4),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.redAccent.withValues(alpha: 0.1),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3), width: 1),
+                                                  ),
+                                                  child: const Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(Icons.favorite, size: 7, color: Colors.redAccent),
+                                                      SizedBox(width: 2),
+                                                      Text(
+                                                        'Auto HR',
+                                                        style: TextStyle(
+                                                          color: Colors.redAccent,
+                                                          fontSize: 8,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                              if ((t['treadmill_workout'] as int? ?? 0) == 1) ...[
+                                                const SizedBox(width: 4),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.cyan.withValues(alpha: 0.1),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: Colors.cyan.withValues(alpha: 0.3), width: 1),
+                                                  ),
+                                                  child: const Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(Icons.directions_run, size: 7, color: Colors.cyan),
+                                                      SizedBox(width: 2),
+                                                      Text(
+                                                        'Treadmill',
+                                                        style: TextStyle(
+                                                          color: Colors.cyan,
+                                                          fontSize: 8,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // Middle: Stats
+                                    Expanded(
+                                      flex: 4,
+                                      child: Text(
+                                        '${continuous ? 'Open Ended' : '$rounds Rnds'} • ${_formatDuration(work)} Work • ${rest == 0 ? 'No Rest' : '${_formatDuration(rest)} Rest'}$weightStr${notes.isNotEmpty ? ' • $notes' : ''}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // Right: Actions
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined, size: 16),
+                                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                          constraints: const BoxConstraints(),
+                                          padding: const EdgeInsets.all(6),
+                                          onPressed: () => _showWorkoutEditor(template: t),
+                                          tooltip: 'Edit Details',
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, size: 16),
+                                          color: Theme.of(context).colorScheme.error.withValues(alpha: 0.6),
+                                          constraints: const BoxConstraints(),
+                                          padding: const EdgeInsets.all(6),
+                                          onPressed: () => _deleteTemplate(t),
+                                          tooltip: 'Delete Workout',
+                                        ),
+                                        const SizedBox(width: 6),
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                                            foregroundColor: Theme.of(context).colorScheme.primary,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            side: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          onPressed: () => widget.onWorkoutSelected(t),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.play_arrow, size: 12),
+                                              SizedBox(width: 2),
+                                              Text('Start', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                            ],
                                           ),
                                         ),
-                                        if ((t['auto_regulate'] as int? ?? 1) == 1)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: Colors.redAccent.withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3), width: 1),
-                                            ),
-                                            child: const Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(Icons.favorite, size: 8, color: Colors.redAccent),
-                                                SizedBox(width: 2),
-                                                Text(
-                                                  'Auto HR',
-                                                  style: TextStyle(
-                                                    color: Colors.redAccent,
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        if ((t['treadmill_workout'] as int? ?? 0) == 1)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: Colors.cyan.withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: Colors.cyan.withValues(alpha: 0.3), width: 1),
-                                            ),
-                                            child: const Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(Icons.directions_run, size: 8, color: Colors.cyan),
-                                                SizedBox(width: 2),
-                                                Text(
-                                                  'Treadmill',
-                                                  style: TextStyle(
-                                                    color: Colors.cyan,
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
                                       ],
                                     ),
-                                    const SizedBox(height: 6),
-                                    // Stats and Notes Row
-                                    Text(
-                                      '${continuous ? 'Open Ended' : '$rounds Rounds'}  •  ${_formatDuration(work)} Work  •  ${rest == 0 ? 'No Rest' : '${_formatDuration(rest)} Rest'}$weightStr${notes.isNotEmpty ? '  •  $notes' : ''}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                  ],
+                                )
+                              : Row(
+                                  children: [
+                                    // Left: Title, Stats, and Notes
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          // Small Activity & Status Badges wrapped responsively
+                                          Wrap(
+                                            spacing: 4,
+                                            runSpacing: 4,
+                                            crossAxisAlignment: WrapCrossAlignment.center,
+                                            children: [
+                                              // Small Activity Badge
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: badgeColor.withValues(alpha: 0.1),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(color: badgeColor.withValues(alpha: 0.3), width: 1),
+                                                ),
+                                                child: Text(
+                                                  _getActivityName(type),
+                                                  style: TextStyle(
+                                                    color: badgeColor,
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                              if ((t['auto_regulate'] as int? ?? 1) == 1)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.redAccent.withValues(alpha: 0.1),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3), width: 1),
+                                                  ),
+                                                  child: const Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(Icons.favorite, size: 8, color: Colors.redAccent),
+                                                      SizedBox(width: 2),
+                                                      Text(
+                                                        'Auto HR',
+                                                        style: TextStyle(
+                                                          color: Colors.redAccent,
+                                                          fontSize: 9,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              if ((t['treadmill_workout'] as int? ?? 0) == 1)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.cyan.withValues(alpha: 0.1),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(color: Colors.cyan.withValues(alpha: 0.3), width: 1),
+                                                  ),
+                                                  child: const Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(Icons.directions_run, size: 8, color: Colors.cyan),
+                                                      SizedBox(width: 2),
+                                                      Text(
+                                                        'Treadmill',
+                                                        style: TextStyle(
+                                                          color: Colors.cyan,
+                                                          fontSize: 9,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          // Stats and Notes Row
+                                          Text(
+                                            '${continuous ? 'Open Ended' : '$rounds Rounds'}  •  ${_formatDuration(work)} Work  •  ${rest == 0 ? 'No Rest' : '${_formatDuration(rest)} Rest'}$weightStr${notes.isNotEmpty ? '  •  $notes' : ''}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    // Right: Action Buttons in a Row
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined, size: 18),
+                                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                          constraints: const BoxConstraints(),
+                                          padding: const EdgeInsets.all(8),
+                                          onPressed: () => _showWorkoutEditor(template: t),
+                                          tooltip: 'Edit Details',
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, size: 18),
+                                          color: Theme.of(context).colorScheme.error.withValues(alpha: 0.6),
+                                          constraints: const BoxConstraints(),
+                                          padding: const EdgeInsets.all(8),
+                                          onPressed: () => _deleteTemplate(t),
+                                          tooltip: 'Delete Workout',
+                                        ),
+                                        const SizedBox(width: 8),
+                                        // Start Button
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                                            foregroundColor: Theme.of(context).colorScheme.primary,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            side: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          onPressed: () => widget.onWorkoutSelected(t),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.play_arrow, size: 14),
+                                              SizedBox(width: 2),
+                                              Text('Start', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              // Right: Action Buttons in a Row
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_outlined, size: 18),
-                                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                                    constraints: const BoxConstraints(),
-                                    padding: const EdgeInsets.all(8),
-                                    onPressed: () => _showWorkoutEditor(template: t),
-                                    tooltip: 'Edit Details',
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, size: 18),
-                                    color: Theme.of(context).colorScheme.error.withValues(alpha: 0.6),
-                                    constraints: const BoxConstraints(),
-                                    padding: const EdgeInsets.all(8),
-                                    onPressed: () => _deleteTemplate(t),
-                                    tooltip: 'Delete Workout',
-                                  ),
-                                  const SizedBox(width: 8),
-                                  // Start Button
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                                      foregroundColor: Theme.of(context).colorScheme.primary,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      side: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    onPressed: () => widget.onWorkoutSelected(t),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.play_arrow, size: 14),
-                                        SizedBox(width: 2),
-                                        Text('Start', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
                         ),
                       );
                     },
