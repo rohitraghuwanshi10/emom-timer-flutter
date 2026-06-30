@@ -27,7 +27,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   StreamSubscription? _btStateSubscription;
   StreamSubscription? _treadmillConnectionSubscription;
   StreamSubscription? _treadmillStatusSubscription;
-  StreamSubscription? _treadmillScanningSubscription;
   late AnimationController _progressController;
 
   int _workDuration = 60;
@@ -44,7 +43,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   
   BluetoothConnectionState _treadmillConnectionState = BluetoothConnectionState.disconnected;
   TreadmillStatus? _treadmillStatus;
-  bool _isTreadmillScanning = false;
   WorkoutState? _lastProcessedTreadmillState;
 
   WorkoutEvent _currentEvent = WorkoutEvent(
@@ -246,7 +244,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   void _setupTreadmill() {
     _treadmillConnectionState = TreadmillBluetoothService.instance.connectionState;
     _treadmillStatus = TreadmillBluetoothService.instance.lastStatus;
-    _isTreadmillScanning = TreadmillBluetoothService.instance.isScanning;
 
     _treadmillConnectionSubscription = TreadmillBluetoothService.instance.connectionStateStream.listen((state) {
       if (mounted) {
@@ -281,14 +278,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         if (status.speed > 0.0) {
           _treadmillSpeeds.add(status.speed);
         }
-      }
-    });
-
-    _treadmillScanningSubscription = TreadmillBluetoothService.instance.scanningStream.listen((scanning) {
-      if (mounted) {
-        setState(() {
-          _isTreadmillScanning = scanning;
-        });
       }
     });
   }
@@ -452,7 +441,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     _btStateSubscription?.cancel();
     _treadmillConnectionSubscription?.cancel();
     _treadmillStatusSubscription?.cancel();
-    _treadmillScanningSubscription?.cancel();
     _engine?.dispose();
     super.dispose();
   }
@@ -1080,7 +1068,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_loadedTemplateName != null) ...[
+            if (_loadedTemplateName != null && MediaQuery.of(context).orientation != Orientation.landscape) ...[
               _buildTemplateHeader(),
               const SizedBox(height: 12),
             ],
@@ -1234,7 +1222,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     );
   }
 
-  Widget _buildTimerDisplay() {
+  Widget _buildTimerDisplay({double? customSize}) {
     Color stateColor;
     String stateText;
     
@@ -1293,10 +1281,11 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
     if (totalPhaseDuration <= 0) totalPhaseDuration = 1;
 
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
     final size = MediaQuery.of(context).size;
-    // Base size off the smaller dimension, capped between 200px and 600px
-    final double rawSize = size.width < size.height ? size.width * 0.8 : size.height * 0.6;
-    final double timerSize = rawSize.clamp(200.0, 600.0);
+    final double timerSize = customSize ?? (isLandscape 
+        ? 160.0 
+        : (size.width < size.height ? size.width * 0.8 : size.height * 0.6).clamp(200.0, 600.0));
     
     final double timeFontSize = timerSize * 0.29;
     final double stateFontSize = timerSize * 0.085;
@@ -1417,158 +1406,345 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
   @override
   Widget build(BuildContext context) {
-    bool isIdle = _currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED;
+    final bool isIdle = _currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED;
     final bool isNarrow = MediaQuery.of(context).size.width < 600;
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
     final bool showTreadmillStop = !isIdle &&
         TreadmillBluetoothService.instance.treadmillEnabled &&
         _treadmillWorkout &&
         _treadmillConnectionState == BluetoothConnectionState.connected;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('ChronoPulse Active'),
-        actions: [
-          _buildProfileSelectorAction(isIdle),
-          IconButton(
-            icon: Icon(
-              (_isBluetoothConnected || _treadmillConnectionState == BluetoothConnectionState.connected)
-                  ? Icons.bluetooth_connected
-                  : Icons.bluetooth_disabled,
-              color: (_isBluetoothConnected || _treadmillConnectionState == BluetoothConnectionState.connected)
-                  ? Theme.of(context).colorScheme.primary
-                  : Colors.grey,
+      appBar: isLandscape
+          ? null
+          : AppBar(
+              title: const Text('ChronoPulse Active'),
+              actions: [
+                _buildProfileSelectorAction(isIdle),
+                IconButton(
+                  icon: Icon(
+                    (_isBluetoothConnected || _treadmillConnectionState == BluetoothConnectionState.connected)
+                        ? Icons.bluetooth_connected
+                        : Icons.bluetooth_disabled,
+                    color: (_isBluetoothConnected || _treadmillConnectionState == BluetoothConnectionState.connected)
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.grey,
+                  ),
+                  onPressed: _showBluetoothDeviceManager,
+                ),
+              ],
             ),
-            onPressed: _showBluetoothDeviceManager,
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: SizedBox(
-          width: MediaQuery.of(context).size.width,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(height: 16),
-              if (_loadedTemplateName != null && !isIdle) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+      body: isLandscape
+          ? SafeArea(
+              top: true,
+              bottom: false,
+              left: true,
+              right: true,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Left Column: Scrollable Stats & Telemetry (50% Width)
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Top control bar inline: Loaded Template badge with Close/Unload action
+                          if (_loadedTemplateName != null) ...[
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.star_outline,
+                                      size: 14,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _loadedTemplateName! + (_isTemplateModified ? ' (Modified)' : ''),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          _loadedTemplateName = null;
+                                          _loadedTemplate = null;
+                                          _treadmillWorkout = false;
+                                        });
+                                      },
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 14,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          _buildLiveHeartRateDisplay(),
+                          const SizedBox(height: 16),
+                          _buildLiveTreadmillTelemetry(),
+                          if (isIdle) ...[
+                            const SizedBox(height: 8),
+                            _buildWorkoutSummaryCard(),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.star_outline,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _loadedTemplateName! + (_isTemplateModified ? ' (Modified)' : ''),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
+                  // Divider
+                  VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.15),
+                  ),
+                  // Right Column: Dynamically-sized Timer Circle and controls (50% Width)
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final availableHeight = constraints.maxHeight;
+                        // Dynamically size timer circle to fit height nicely (leave ~80px for spacing/controls)
+                        final timerSize = (availableHeight - 80).clamp(130.0, 220.0);
+
+                        return Center(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                _buildTimerDisplay(customSize: timerSize),
+                                const SizedBox(height: 12),
+                                _buildInlineControls(isIdle, showTreadmillStop),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : SingleChildScrollView(
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 16),
+                    if (_loadedTemplateName != null && !isIdle) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.star_outline,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _loadedTemplateName! + (_isTemplateModified ? ' (Modified)' : ''),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                      const SizedBox(height: 12),
                     ],
-                  ),
+                    _buildTimerDisplay(),
+                    const SizedBox(height: 24),
+                    _buildLiveHeartRateDisplay(),
+                    const SizedBox(height: 24),
+                    _buildLiveTreadmillTelemetry(),
+                    const SizedBox(height: 24),
+                    if (isIdle) _buildWorkoutSummaryCard(),
+                  ],
                 ),
-                const SizedBox(height: 12),
-              ],
-              _buildTimerDisplay(),
-              const SizedBox(height: 24),
-              _buildLiveHeartRateDisplay(),
-              const SizedBox(height: 24),
-              _buildLiveTreadmillTelemetry(),
-              const SizedBox(height: 24),
-              if (isIdle) _buildWorkoutSummaryCard(),
-            ],
+              ),
+            ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: isLandscape
+          ? null
+          : (isIdle
+              ? (isNarrow
+                  ? FloatingActionButton(
+                      heroTag: 'start_btn',
+                      onPressed: _startWorkout,
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      child: const Icon(Icons.play_arrow),
+                    )
+                  : FloatingActionButton.extended(
+                      heroTag: 'start_btn',
+                      onPressed: _startWorkout,
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Start'),
+                    ))
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    isNarrow
+                        ? FloatingActionButton(
+                            heroTag: 'pause_btn',
+                            onPressed: () => _engine?.pause(),
+                            backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
+                                ? Theme.of(context).colorScheme.secondary 
+                                : Colors.orange,
+                            child: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
+                          )
+                        : FloatingActionButton.extended(
+                            heroTag: 'pause_btn',
+                            onPressed: () => _engine?.pause(),
+                            backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
+                                ? Theme.of(context).colorScheme.secondary 
+                                : Colors.orange,
+                            icon: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
+                            label: Text(_currentEvent.state == WorkoutState.PAUSED ? 'Resume' : 'Pause'),
+                          ),
+                    if (showTreadmillStop) ...[
+                      const SizedBox(width: 16),
+                      isNarrow
+                          ? FloatingActionButton(
+                              heroTag: 'tm_stop_btn',
+                              onPressed: () {
+                                TreadmillBluetoothService.instance.stop();
+                                _engine?.pause();
+                              },
+                              backgroundColor: Colors.red,
+                              child: const Icon(Icons.pan_tool, color: Colors.white),
+                            )
+                          : FloatingActionButton.extended(
+                              heroTag: 'tm_stop_btn',
+                              onPressed: () {
+                                TreadmillBluetoothService.instance.stop();
+                                _engine?.pause();
+                              },
+                              backgroundColor: Colors.red,
+                              icon: const Icon(Icons.pan_tool, color: Colors.white),
+                              label: const Text('STOP TREADMILL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            ),
+                    ],
+                    const SizedBox(width: 16),
+                    isNarrow
+                        ? FloatingActionButton(
+                            heroTag: 'stop_btn',
+                            onPressed: _stopWorkout,
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                            child: const Icon(Icons.stop),
+                          )
+                        : FloatingActionButton.extended(
+                            heroTag: 'stop_btn',
+                            onPressed: _stopWorkout,
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                            icon: const Icon(Icons.stop),
+                            label: const Text('End'),
+                          ),
+                  ],
+                )),
+    );
+  }
+
+  Widget _buildInlineControls(bool isIdle, bool showTreadmillStop) {
+    if (isIdle) {
+      return ElevatedButton.icon(
+        onPressed: _startWorkout,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Theme.of(context).colorScheme.secondary,
+          foregroundColor: Theme.of(context).colorScheme.onSecondary,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: isIdle
-          ? (isNarrow
-              ? FloatingActionButton(
-                  heroTag: 'start_btn',
-                  onPressed: _startWorkout,
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
-                  child: const Icon(Icons.play_arrow),
-                )
-              : FloatingActionButton.extended(
-                  heroTag: 'start_btn',
-                  onPressed: _startWorkout,
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Start'),
-                ))
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                isNarrow
-                    ? FloatingActionButton(
-                        heroTag: 'pause_btn',
-                        onPressed: () => _engine?.pause(),
-                        backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
-                            ? Theme.of(context).colorScheme.secondary 
-                            : Colors.orange,
-                        child: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
-                      )
-                    : FloatingActionButton.extended(
-                        heroTag: 'pause_btn',
-                        onPressed: () => _engine?.pause(),
-                        backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
-                            ? Theme.of(context).colorScheme.secondary 
-                            : Colors.orange,
-                        icon: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
-                        label: Text(_currentEvent.state == WorkoutState.PAUSED ? 'Resume' : 'Pause'),
-                      ),
-                if (showTreadmillStop) ...[
-                  const SizedBox(width: 16),
-                  isNarrow
-                      ? FloatingActionButton(
-                          heroTag: 'tm_stop_btn',
-                          onPressed: () {
-                            TreadmillBluetoothService.instance.stop();
-                            _engine?.pause();
-                          },
-                          backgroundColor: Colors.red,
-                          child: const Icon(Icons.pan_tool, color: Colors.white),
-                        )
-                      : FloatingActionButton.extended(
-                          heroTag: 'tm_stop_btn',
-                          onPressed: () {
-                            TreadmillBluetoothService.instance.stop();
-                            _engine?.pause();
-                          },
-                          backgroundColor: Colors.red,
-                          icon: const Icon(Icons.pan_tool, color: Colors.white),
-                          label: const Text('STOP TREADMILL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ),
-                ],
-                const SizedBox(width: 16),
-                isNarrow
-                    ? FloatingActionButton(
-                        heroTag: 'stop_btn',
-                        onPressed: _stopWorkout,
-                        backgroundColor: Theme.of(context).colorScheme.error,
-                        child: const Icon(Icons.stop),
-                      )
-                    : FloatingActionButton.extended(
-                        heroTag: 'stop_btn',
-                        onPressed: _stopWorkout,
-                        backgroundColor: Theme.of(context).colorScheme.error,
-                        icon: const Icon(Icons.stop),
-                        label: const Text('End'),
-                      ),
-              ],
+        icon: const Icon(Icons.play_arrow),
+        label: const Text('Start', style: TextStyle(fontWeight: FontWeight.bold)),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.center,
+      children: [
+        ElevatedButton.icon(
+          onPressed: () => _engine?.pause(),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
+                ? Theme.of(context).colorScheme.secondary 
+                : Colors.orange,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
             ),
+          ),
+          icon: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause, size: 14),
+          label: Text(_currentEvent.state == WorkoutState.PAUSED ? 'Resume' : 'Pause', style: const TextStyle(fontSize: 11)),
+        ),
+        if (showTreadmillStop)
+          ElevatedButton.icon(
+            onPressed: () {
+              TreadmillBluetoothService.instance.stop();
+              _engine?.pause();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            icon: const Icon(Icons.pan_tool, size: 12, color: Colors.white),
+            label: const Text('STOP TM', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ElevatedButton.icon(
+          onPressed: _stopWorkout,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          icon: const Icon(Icons.stop, size: 14),
+          label: const Text('End', style: TextStyle(fontSize: 11)),
+        ),
+      ],
     );
   }
 

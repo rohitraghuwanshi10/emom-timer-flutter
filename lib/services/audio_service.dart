@@ -20,9 +20,8 @@ class AudioService {
     _restPlayer.setSource(AssetSource('sounds/Hero.wav'));
 
     _tickPlayer.setReleaseMode(ReleaseMode.stop);
-    _tickPlayer.setSource(AssetSource('sounds/Glass.wav'));
-    _tickPlayer.setVolume(0.5);
-    _tickPlayer.setPlaybackRate(2.4); // High-pitched short tink for countdown ticks
+    _tickPlayer.setSource(AssetSource('sounds/Tick.wav'));
+    _tickPlayer.setVolume(0.8);
   }
 
   void _configureAudioSession() async {

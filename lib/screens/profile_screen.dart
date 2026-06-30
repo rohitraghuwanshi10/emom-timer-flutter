@@ -298,17 +298,28 @@ class ProfileScreenState extends State<ProfileScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile Management'),
-        actions: [
-          _buildProfileSelectorAction(),
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _saveProfile,
-          )
-        ],
-      ),
+      appBar: isLandscape
+          ? null
+          : AppBar(
+              title: const Text('Profile Management'),
+              actions: [
+                _buildProfileSelectorAction(),
+                IconButton(
+                  icon: const Icon(Icons.save),
+                  onPressed: _saveProfile,
+                )
+              ],
+            ),
+      floatingActionButton: isLandscape
+          ? FloatingActionButton(
+              onPressed: _saveProfile,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              child: const Icon(Icons.save),
+            )
+          : null,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(

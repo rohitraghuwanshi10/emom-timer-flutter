@@ -342,6 +342,7 @@ class LibraryScreenState extends State<LibraryScreen> {
         final db = await DatabaseHelper.instance.database;
         await db.delete('workout_templates', where: 'id = ?', whereArgs: [id]);
         
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('"$name" deleted from library')),
         );
@@ -831,9 +832,11 @@ class LibraryScreenState extends State<LibraryScreen> {
                               whereArgs: [template['id']],
                             );
                             
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Workout updated')),
-                            );
+                             if (context.mounted) {
+                               ScaffoldMessenger.of(context).showSnackBar(
+                                 const SnackBar(content: Text('Workout updated')),
+                               );
+                             }
                           } else {
                             // Insert new template
                             await db.insert(
@@ -859,9 +862,11 @@ class LibraryScreenState extends State<LibraryScreen> {
                               conflictAlgorithm: ConflictAlgorithm.replace,
                             );
                             
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Workout added to library')),
-                            );
+                             if (context.mounted) {
+                               ScaffoldMessenger.of(context).showSnackBar(
+                                 const SnackBar(content: Text('Workout added to library')),
+                               );
+                             }
                           }
                           
                           if (context.mounted) Navigator.pop(context);
@@ -887,23 +892,26 @@ class LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Workout Library'),
-        actions: [
-          _buildProfileSelectorAction(),
-          IconButton(
-            icon: const Icon(Icons.sync),
-            onPressed: () async {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Syncing library...')),
-              );
-              await SyncService.instance.signInAndSync();
-              loadTemplates();
-            },
-          ),
-        ],
-      ),
+      appBar: isLandscape
+          ? null
+          : AppBar(
+              title: const Text('Workout Library'),
+              actions: [
+                _buildProfileSelectorAction(),
+                IconButton(
+                  icon: const Icon(Icons.sync),
+                  onPressed: () async {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Syncing library...')),
+                    );
+                    await SyncService.instance.signInAndSync();
+                    loadTemplates();
+                  },
+                ),
+              ],
+            ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showWorkoutEditor(),
         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -918,38 +926,57 @@ class LibraryScreenState extends State<LibraryScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Column(
               children: [
-                // Search bar
-                TextField(
-                  controller: _searchController,
-                  onChanged: (val) {
-                    setState(() {
-                      _searchQuery = val;
-                      _applyFilters();
-                    });
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Search workouts...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {
-                                _searchQuery = '';
-                                _applyFilters();
-                              });
-                            },
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: (val) {
+                          setState(() {
+                            _searchQuery = val;
+                            _applyFilters();
+                          });
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Search workouts...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {
+                                      _searchQuery = '';
+                                      _applyFilters();
+                                    });
+                                  },
+                                )
+                              : null,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context).scaffoldBackgroundColor,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                        ),
+                      ),
                     ),
-                    filled: true,
-                    fillColor: Theme.of(context).scaffoldBackgroundColor,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                  ),
+                    if (isLandscape) ...[
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.sync),
+                        tooltip: 'Sync library',
+                        onPressed: () async {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Syncing library...')),
+                          );
+                          await SyncService.instance.signInAndSync();
+                          loadTemplates();
+                        },
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 10),
                 // Horizontal category filter pills
@@ -1053,20 +1080,22 @@ class LibraryScreenState extends State<LibraryScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Row(
+                                    Text(
+                                      name,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    // Small Activity & Status Badges wrapped responsively
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 4,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
                                       children: [
-                                        Flexible(
-                                          child: Text(
-                                            name,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
                                         // Small Activity Badge
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1084,8 +1113,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                                             ),
                                           ),
                                         ),
-                                        if ((t['auto_regulate'] as int? ?? 1) == 1) ...[
-                                          const SizedBox(width: 4),
+                                        if ((t['auto_regulate'] as int? ?? 1) == 1)
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                             decoration: BoxDecoration(
@@ -1109,9 +1137,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                                               ],
                                             ),
                                           ),
-                                        ],
-                                        if ((t['treadmill_workout'] as int? ?? 0) == 1) ...[
-                                          const SizedBox(width: 4),
+                                        if ((t['treadmill_workout'] as int? ?? 0) == 1)
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                             decoration: BoxDecoration(
@@ -1135,10 +1161,9 @@ class LibraryScreenState extends State<LibraryScreen> {
                                               ],
                                             ),
                                           ),
-                                        ],
                                       ],
                                     ),
-                                    const SizedBox(height: 4),
+                                    const SizedBox(height: 6),
                                     // Stats and Notes Row
                                     Text(
                                       '${continuous ? 'Open Ended' : '$rounds Rounds'}  •  ${_formatDuration(work)} Work  •  ${rest == 0 ? 'No Rest' : '${_formatDuration(rest)} Rest'}$weightStr${notes.isNotEmpty ? '  •  $notes' : ''}',

@@ -138,62 +138,75 @@ class HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Workout History'),
-        actions: [
-          _buildProfileSelectorAction(),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadHistory,
-          )
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _isLoading 
-              ? const Center(child: CircularProgressIndicator())
-              : _days.isEmpty 
-                ? const Center(child: Text('No workouts found. Go crush one!'))
-                : ListView.builder(
-                    itemCount: _days.length,
-                    itemBuilder: (context, index) {
-                      final day = _days[index];
-                      
-                      final int totalSec = (day['total_time'] as num?)?.toInt() ?? 0;
-                      final String timeStr = totalSec >= 3600
-                          ? '${totalSec ~/ 3600}h ${((totalSec % 3600) ~/ 60).toString().padLeft(2, '0')}m'
-                          : '${totalSec ~/ 60}m ${totalSec % 60}s';
-                      final dateStr = day['date_str'] as String;
-                      
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-                            child: const Icon(Icons.calendar_today),
-                          ),
-                          title: Text(_formatDate(dateStr), style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('${day['workout_count']} workout(s) • Total time: $timeStr'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => DetailsScreen(
-                                  dateStr: dateStr,
-                                  profileName: _profileName,
+      appBar: isLandscape
+          ? null
+          : AppBar(
+              title: const Text('Workout History'),
+              actions: [
+                _buildProfileSelectorAction(),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadHistory,
+                )
+              ],
+            ),
+      body: RefreshIndicator(
+        onRefresh: _loadHistory,
+        child: Column(
+          children: [
+            Expanded(
+              child: _isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : _days.isEmpty 
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [
+                        SizedBox(height: 100),
+                        Center(child: Text('No workouts found. Go crush one!')),
+                      ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: _days.length,
+                      itemBuilder: (context, index) {
+                        final day = _days[index];
+                        
+                        final int totalSec = (day['total_time'] as num?)?.toInt() ?? 0;
+                        final String timeStr = totalSec >= 3600
+                            ? '${totalSec ~/ 3600}h ${((totalSec % 3600) ~/ 60).toString().padLeft(2, '0')}m'
+                            : '${totalSec ~/ 60}m ${totalSec % 60}s';
+                        final dateStr = day['date_str'] as String;
+                        
+                        return Card(
+                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                              child: const Icon(Icons.calendar_today),
+                            ),
+                            title: Text(_formatDate(dateStr), style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text('${day['workout_count']} workout(s) • Total time: $timeStr'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => DetailsScreen(
+                                    dateStr: dateStr,
+                                    profileName: _profileName,
+                                  ),
                                 ),
-                              ),
-                            ).then((_) => _loadHistory());
-                          },
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
+                              ).then((_) => _loadHistory());
+                            },
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
