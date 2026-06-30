@@ -102,6 +102,36 @@ class SyncService extends ChangeNotifier {
       
       if (remoteData != null) {
         final remoteUpdatedAtStr = remoteData['updated_at'] as String?;
+        
+        if (localUpdatedAtStr == remoteUpdatedAtStr) {
+          if (localUpdatedAtStr == null) {
+            // Both are null (healing legacy case). Set a fresh timestamp and upload local to remote.
+            final freshTimestamp = DateTime.now().toIso8601String();
+            await db.update('profiles', {'updated_at': freshTimestamp}, where: 'name = ?', whereArgs: [name]);
+            await _firestore.collection('profiles').doc(name).set({
+              'name': name,
+              'created_at': local['created_at'],
+              'max_hr': local['max_hr'],
+              'max_prework_hr': local['max_prework_hr'],
+              'sex': local['sex'],
+              'birth_date': local['birth_date'],
+              'weight_kg': local['weight_kg'],
+              'weight_unit_pref': local['weight_unit_pref'],
+              'distance_unit_pref': local['distance_unit_pref'] ?? 'km',
+              'auto_connect_hr': local['auto_connect_hr'],
+              'save_history': local['save_history'] ?? 1,
+              'treadmill_enabled': local['treadmill_enabled'] ?? 0,
+              'treadmill_preset_1': local['treadmill_preset_1'] ?? 2.0,
+              'treadmill_preset_2': local['treadmill_preset_2'] ?? 4.0,
+              'treadmill_preset_3': local['treadmill_preset_3'] ?? 6.0,
+              'updated_at': freshTimestamp,
+            }, SetOptions(merge: true));
+            debugPrint('SyncService: Healed and synced null timestamps for profile $name.');
+          }
+          // Already in perfect sync, skip!
+          continue;
+        }
+
         final remoteUpdatedAt = remoteUpdatedAtStr != null ? DateTime.tryParse(remoteUpdatedAtStr) : null;
 
         // If local is newer, upload local to remote. If remote is newer, download remote.
