@@ -374,6 +374,14 @@ class LibraryScreenState extends State<LibraryScreen> {
     double workSpeed = isMetric ? rawWorkSpeed : rawWorkSpeed * 0.621371;
     double restSpeed = isMetric ? rawRestSpeed : rawRestSpeed * 0.621371;
 
+    final double rawWeightMoved = isEditing ? (template['weight_moved'] as num?)?.toDouble() ?? 0.0 : 0.0;
+    String weightUnit = isEditing ? template['weight_unit'] as String? ?? 'kg' : 'kg';
+    final double rawRuckWeight = isEditing ? (template['ruck_weight'] as num?)?.toDouble() ?? 0.0 : 0.0;
+    String ruckWeightUnit = isEditing ? template['ruck_weight_unit'] as String? ?? 'lbs' : 'lbs';
+
+    final weightController = TextEditingController(text: rawWeightMoved > 0 ? rawWeightMoved.toString() : '');
+    final ruckWeightController = TextEditingController(text: rawRuckWeight > 0 ? rawRuckWeight.toString() : '');
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -412,7 +420,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: activityType,
+                      initialValue: activityType,
                       decoration: const InputDecoration(
                         labelText: 'Activity Type',
                         border: OutlineInputBorder(),
@@ -431,6 +439,91 @@ class LibraryScreenState extends State<LibraryScreen> {
                           });
                         }
                       },
+                    ),
+                    const SizedBox(height: 16),
+                    Builder(
+                      builder: (context) {
+                        final bool isStrength = const {'STRENGTH', 'FUNCTIONAL_STRENGTH', 'CALISTHENICS'}.contains(activityType);
+                        if (isStrength) {
+                          return Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextField(
+                                  controller: weightController,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Lifting Weight per Round',
+                                    hintText: '0.0',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: weightUnit,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Unit',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(value: 'kg', child: Text('kg')),
+                                    DropdownMenuItem(value: 'lbs', child: Text('lbs')),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setModalState(() {
+                                        weightUnit = val;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        } else {
+                          return Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextField(
+                                  controller: ruckWeightController,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Ruck / Vest Weight',
+                                    hintText: '0.0',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: ruckWeightUnit,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Unit',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(value: 'kg', child: Text('kg')),
+                                    DropdownMenuItem(value: 'lbs', child: Text('lbs')),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setModalState(() {
+                                        ruckWeightUnit = val;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                      }
                     ),
                     const SizedBox(height: 16),
                     // Rounds Slider & Steppers
@@ -707,6 +800,12 @@ class LibraryScreenState extends State<LibraryScreen> {
                           final double dbWorkSpeed = isMetric ? workSpeed : workSpeed * 1.60934;
                           final double dbRestSpeed = isMetric ? restSpeed : restSpeed * 1.60934;
 
+                          final bool isStrength = const {'STRENGTH', 'FUNCTIONAL_STRENGTH', 'CALISTHENICS'}.contains(activityType);
+                          final double dbWeightMoved = isStrength ? (double.tryParse(weightController.text) ?? 0.0) : 0.0;
+                          final String dbWeightUnit = weightUnit;
+                          final double dbRuckWeight = !isStrength ? (double.tryParse(ruckWeightController.text) ?? 0.0) : 0.0;
+                          final String dbRuckWeightUnit = ruckWeightUnit;
+
                           if (isEditing) {
                             // Update template in DB
                             await db.update(
@@ -723,6 +822,10 @@ class LibraryScreenState extends State<LibraryScreen> {
                                 'treadmill_workout': treadmillWorkout ? 1 : 0,
                                 'work_speed': dbWorkSpeed,
                                 'rest_speed': dbRestSpeed,
+                                'weight_moved': dbWeightMoved,
+                                'weight_unit': dbWeightUnit,
+                                'ruck_weight': dbRuckWeight,
+                                'ruck_weight_unit': dbRuckWeightUnit,
                               },
                               where: 'id = ?',
                               whereArgs: [template['id']],
@@ -748,6 +851,10 @@ class LibraryScreenState extends State<LibraryScreen> {
                                 'treadmill_workout': treadmillWorkout ? 1 : 0,
                                 'work_speed': dbWorkSpeed,
                                 'rest_speed': dbRestSpeed,
+                                'weight_moved': dbWeightMoved,
+                                'weight_unit': dbWeightUnit,
+                                'ruck_weight': dbRuckWeight,
+                                'ruck_weight_unit': dbRuckWeightUnit,
                               },
                               conflictAlgorithm: ConflictAlgorithm.replace,
                             );
@@ -909,6 +1016,19 @@ class LibraryScreenState extends State<LibraryScreen> {
                       final rest = t['rest_time'] as int;
                       final notes = t['notes'] as String? ?? '';
                       final continuous = (t['continuous_mode'] as int? ?? 0) == 1;
+                      
+                      final weightMoved = (t['weight_moved'] as num?)?.toDouble() ?? 0.0;
+                      final weightUnit = t['weight_unit'] as String? ?? 'kg';
+                      final ruckWeight = (t['ruck_weight'] as num?)?.toDouble() ?? 0.0;
+                      final ruckWeightUnit = t['ruck_weight_unit'] as String? ?? 'lbs';
+                      final isStrength = const {'STRENGTH', 'FUNCTIONAL_STRENGTH', 'CALISTHENICS'}.contains(type);
+                      
+                      String weightStr = '';
+                      if (isStrength && weightMoved > 0.0) {
+                        weightStr = '  •  ${weightMoved.toStringAsFixed(1)} $weightUnit';
+                      } else if (!isStrength && ruckWeight > 0.0) {
+                        weightStr = '  •  ${ruckWeight.toStringAsFixed(1)} $ruckWeightUnit ruck';
+                      }
 
                       final badgeColor = _getActivityColor(type);
 
@@ -1021,7 +1141,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                                     const SizedBox(height: 4),
                                     // Stats and Notes Row
                                     Text(
-                                      '${continuous ? 'Open Ended' : '$rounds Rounds'}  •  ${_formatDuration(work)} Work  •  ${rest == 0 ? 'No Rest' : '${_formatDuration(rest)} Rest'}${notes.isNotEmpty ? '  •  $notes' : ''}',
+                                      '${continuous ? 'Open Ended' : '$rounds Rounds'}  •  ${_formatDuration(work)} Work  •  ${rest == 0 ? 'No Rest' : '${_formatDuration(rest)} Rest'}$weightStr${notes.isNotEmpty ? '  •  $notes' : ''}',
                                       style: TextStyle(
                                         fontSize: 12,
                                         color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),

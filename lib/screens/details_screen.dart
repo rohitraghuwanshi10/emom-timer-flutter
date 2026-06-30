@@ -103,7 +103,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       final bool isMetric = _distanceUnitPref == 'km';
       final String distUnit = isMetric ? 'km' : 'mi';
       final String speedUnit = isMetric ? 'km/h' : 'mph';
-      csvBuffer.writeln('Workout,Start Time,Rounds,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),Calories (kcal),Run Dist ($distUnit),Run Peak Speed ($speedUnit),Run Avg Speed ($speedUnit),Notes');
+      csvBuffer.writeln('Workout,Start Time,Rounds,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),Calories (kcal),Run Dist ($distUnit),Run Peak Speed ($speedUnit),Run Avg Speed ($speedUnit),Weight Moved,Weight Unit,Total Weight Moved,Ruck Weight,Ruck Weight Unit,Notes');
 
       for (int i = 0; i < _workouts.length; i++) {
         final w = _workouts[i];
@@ -135,6 +135,12 @@ class _DetailsScreenState extends State<DetailsScreen> {
         final String runDist = displayDist.toStringAsFixed(2);
         final String runPeak = displayPeak.toStringAsFixed(1);
         final String runAvg = displayAvg.toStringAsFixed(1);
+
+        final double weightMoved = (w['weight_moved'] as num?)?.toDouble() ?? 0.0;
+        final String weightUnit = w['weight_unit'] as String? ?? 'kg';
+        final double totalWeightMoved = (w['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
+        final double ruckWeight = (w['ruck_weight'] as num?)?.toDouble() ?? 0.0;
+        final String ruckWeightUnit = w['ruck_weight_unit'] as String? ?? 'lbs';
         
         // Escape notes for CSV
         String notes = w['notes'] as String? ?? '';
@@ -149,7 +155,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
         if (escapedName.contains(',') || escapedName.contains('"') || escapedName.contains('\n') || escapedName.contains('\r')) {
           escapedName = '"${escapedName.replaceAll('"', '""')}"';
         }
-        csvBuffer.writeln('$escapedName,$startStr,$rounds,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$runDist,$runPeak,$runAvg,$notes');
+        csvBuffer.writeln('$escapedName,$startStr,$rounds,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$runDist,$runPeak,$runAvg,$weightMoved,$weightUnit,$totalWeightMoved,$ruckWeight,$ruckWeightUnit,$notes');
       }
 
       // Write to file
@@ -254,6 +260,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
           DataColumn(label: Text('Peak HR')),
           DataColumn(label: Text('Avg HR')),
           DataColumn(label: Text('Cals (kcal)')),
+          DataColumn(label: Text('Weight / Load')),
           DataColumn(label: Text('Run Dist')),
           DataColumn(label: Text('Peak Speed')),
           DataColumn(label: Text('Avg Speed')),
@@ -284,6 +291,19 @@ class _DetailsScreenState extends State<DetailsScreen> {
             final String distUnit = isMetric ? 'km' : 'mi';
             final String speedUnit = isMetric ? 'km/h' : 'mph';
 
+            final weightMoved = (w['weight_moved'] as num?)?.toDouble() ?? 0.0;
+            final weightUnit = w['weight_unit'] as String? ?? 'kg';
+            final totalWeightMoved = (w['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
+            final ruckWeight = (w['ruck_weight'] as num?)?.toDouble() ?? 0.0;
+            final ruckWeightUnit = w['ruck_weight_unit'] as String? ?? 'lbs';
+
+            String weightLoadDisplay = '--';
+            if (weightMoved > 0.0) {
+              weightLoadDisplay = '${weightMoved.toStringAsFixed(1)} $weightUnit (${totalWeightMoved.toStringAsFixed(1)} total)';
+            } else if (ruckWeight > 0.0) {
+              weightLoadDisplay = '${ruckWeight.toStringAsFixed(1)} $ruckWeightUnit ruck';
+            }
+
             return DataRow(cells: [
               DataCell(Text(name, style: TextStyle(color: wColor, fontWeight: FontWeight.bold))),
             DataCell(Text(startStr)),
@@ -294,6 +314,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
             DataCell(Text(_fmtHr(w['max_hr']), style: const TextStyle(color: Color(0xFFFF3B30)))), // Neon Red
             DataCell(Text(_fmtHr(w['avg_hr']), style: const TextStyle(color: Color(0xFF38B6FF)))), // Cyan/Blue
             DataCell(Text((w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--', style: const TextStyle(color: Color(0xFFBF5AF2)))), // Neon Purple
+            DataCell(Text(weightLoadDisplay, style: const TextStyle(color: Colors.amber))),
             DataCell(Text(runDistance > 0 ? "${displayDist.toStringAsFixed(2)} $distUnit" : '--', style: const TextStyle(color: Color(0xFF00E5FF)))),
             DataCell(Text(runPeakSpeed > 0 ? "${displayPeak.toStringAsFixed(1)} $speedUnit" : '--')),
             DataCell(Text(runAvgSpeed > 0 ? "${displayAvg.toStringAsFixed(1)} $speedUnit" : '--')),

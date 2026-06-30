@@ -63,6 +63,11 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   String _activityType = 'HIIT';
   bool _treadmillWorkout = false;
 
+  double _weightMoved = 0.0;
+  String _weightUnit = 'kg';
+  double _ruckWeight = 0.0;
+  String _ruckWeightUnit = 'lbs';
+
   bool get _isTemplateModified {
     if (_loadedTemplate == null) return false;
     final templateAutoRegulate = (_loadedTemplate!['auto_regulate'] as int? ?? 1) == 1;
@@ -76,6 +81,16 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         TreadmillBluetoothService.instance.workSpeed != templateWorkSpeed ||
         TreadmillBluetoothService.instance.restSpeed != templateRestSpeed;
 
+    final templateWeightMoved = (_loadedTemplate!['weight_moved'] as num?)?.toDouble() ?? 0.0;
+    final templateWeightUnit = _loadedTemplate!['weight_unit'] as String? ?? 'kg';
+    final templateRuckWeight = (_loadedTemplate!['ruck_weight'] as num?)?.toDouble() ?? 0.0;
+    final templateRuckWeightUnit = _loadedTemplate!['ruck_weight_unit'] as String? ?? 'lbs';
+
+    final weightModified = _weightMoved != templateWeightMoved ||
+        _weightUnit != templateWeightUnit ||
+        _ruckWeight != templateRuckWeight ||
+        _ruckWeightUnit != templateRuckWeightUnit;
+
     return _totalRounds != _loadedTemplate!['rounds'] ||
         _workDuration != _loadedTemplate!['work_time'] ||
         _restDuration != _loadedTemplate!['rest_time'] ||
@@ -83,7 +98,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         _continuousMode != ((_loadedTemplate!['continuous_mode'] as int? ?? 0) == 1) ||
         _activityType != (_loadedTemplate!['activity_type'] ?? 'HIIT') ||
         autoRegulateModified ||
-        treadmillModified;
+        treadmillModified ||
+        weightModified;
   }
   
   // Cache variables for calorie/zone calculations
@@ -186,6 +202,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           TreadmillBluetoothService.instance.restSpeed = (template['rest_speed'] as num?)?.toDouble() ?? 0.0;
           TreadmillBluetoothService.instance.autoSpeedSync = true;
         }
+        _weightMoved = (template['weight_moved'] as num?)?.toDouble() ?? 0.0;
+        _weightUnit = template['weight_unit'] as String? ?? 'kg';
+        _ruckWeight = (template['ruck_weight'] as num?)?.toDouble() ?? 0.0;
+        _ruckWeightUnit = template['ruck_weight_unit'] as String? ?? 'lbs';
       });
       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
     }
@@ -635,6 +655,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           ? (_treadmillSpeeds.reduce((a, b) => a + b) / _treadmillSpeeds.length)
           : 0.0;
 
+      final bool isStrength = const {'STRENGTH', 'FUNCTIONAL_STRENGTH', 'CALISTHENICS'}.contains(_activityType);
+      final double weightMovedToSave = isStrength ? _weightMoved : 0.0;
+      final double ruckWeightToSave = !isStrength ? _ruckWeight : 0.0;
+
       final workoutId = await DatabaseHelper.instance.saveWorkout(
         profileName: _profileName,
         workoutName: workoutName,
@@ -655,6 +679,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         runDistance: _treadmillWorkout ? double.parse(_treadmillAccumulatedDistance.toStringAsFixed(2)) : 0.0,
         runPeakSpeed: _treadmillWorkout ? _treadmillPeakSpeed : 0.0,
         runAvgSpeed: _treadmillWorkout ? double.parse(avgSpeed.toStringAsFixed(2)) : 0.0,
+        weightMoved: weightMovedToSave,
+        weightUnit: _weightUnit,
+        ruckWeight: ruckWeightToSave,
+        ruckWeightUnit: _ruckWeightUnit,
       );
       
       debugPrint("TimerScreen: _healthEnabled is $_healthEnabled");
@@ -992,6 +1020,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     _treadmillWorkout = false;
                     TreadmillBluetoothService.instance.autoSpeedSync = false;
                     _autoRegulationEnabled = _isBluetoothConnected && _maxPreworkHr > 0;
+                    _weightMoved = 0.0;
+                    _weightUnit = 'kg';
+                    _ruckWeight = 0.0;
+                    _ruckWeightUnit = 'lbs';
                   });
                 },
                 icon: const Icon(Icons.close, size: 14),
@@ -2270,6 +2302,27 @@ class _CustomizeWorkoutSheet extends StatefulWidget {
 }
 
 class _CustomizeWorkoutSheetState extends State<_CustomizeWorkoutSheet> {
+  late final TextEditingController _weightController;
+  late final TextEditingController _ruckWeightController;
+
+  @override
+  void initState() {
+    super.initState();
+    _weightController = TextEditingController(
+      text: widget.timerState._weightMoved > 0 ? widget.timerState._weightMoved.toString() : '',
+    );
+    _ruckWeightController = TextEditingController(
+      text: widget.timerState._ruckWeight > 0 ? widget.timerState._ruckWeight.toString() : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _weightController.dispose();
+    _ruckWeightController.dispose();
+    super.dispose();
+  }
+
   void _updateState(VoidCallback fn) {
     setState(fn);
     widget.timerState.setState(fn);
@@ -2626,6 +2679,107 @@ class _CustomizeWorkoutSheetState extends State<_CustomizeWorkoutSheet> {
                         },
                       ),
                     ],
+                  ),
+                  const Divider(),
+                  Builder(
+                    builder: (context) {
+                      final bool isStrength = const {'STRENGTH', 'FUNCTIONAL_STRENGTH', 'CALISTHENICS'}.contains(widget.timerState._activityType);
+                      if (isStrength) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextField(
+                                  controller: _weightController,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Lifting Weight per Round',
+                                    hintText: '0.0',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (val) {
+                                    _updateState(() {
+                                      widget.timerState._weightMoved = double.tryParse(val) ?? 0.0;
+                                    });
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: widget.timerState._weightUnit,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Unit',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(value: 'kg', child: Text('kg')),
+                                    DropdownMenuItem(value: 'lbs', child: Text('lbs')),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      _updateState(() {
+                                        widget.timerState._weightUnit = val;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      } else {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextField(
+                                  controller: _ruckWeightController,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Ruck / Vest Weight',
+                                    hintText: '0.0',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (val) {
+                                    _updateState(() {
+                                      widget.timerState._ruckWeight = double.tryParse(val) ?? 0.0;
+                                    });
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: widget.timerState._ruckWeightUnit,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Unit',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(value: 'kg', child: Text('kg')),
+                                    DropdownMenuItem(value: 'lbs', child: Text('lbs')),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      _updateState(() {
+                                        widget.timerState._ruckWeightUnit = val;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                    },
                   ),
                   if (hasTreadmill) ...[
                     const Divider(),

@@ -681,5 +681,67 @@ void main() {
 
       await dbV12.close();
     });
+
+    test('Migration from version 12 to 13 adds weight columns successfully', () async {
+      final dbPath = '${await getDatabasesPath()}/migration_v12_to_v13.db';
+      await deleteDatabase(dbPath);
+
+      final db = await openDatabase(
+        dbPath,
+        version: 12,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workout_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_name TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workout_name TEXT
+            )
+          ''');
+        },
+      );
+
+      await db.insert('workout_templates', {'template_name': 'Strength Template'});
+      await db.insert('workouts', {'workout_name': 'Strength Session'});
+      await db.close();
+
+      final dbV13 = await openDatabase(
+        dbPath,
+        version: 13,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 13) {
+            await db.execute('ALTER TABLE workout_templates ADD COLUMN weight_moved REAL DEFAULT 0.0');
+            await db.execute("ALTER TABLE workout_templates ADD COLUMN weight_unit TEXT DEFAULT 'kg'");
+            await db.execute('ALTER TABLE workout_templates ADD COLUMN ruck_weight REAL DEFAULT 0.0');
+            await db.execute("ALTER TABLE workout_templates ADD COLUMN ruck_weight_unit TEXT DEFAULT 'lbs'");
+            
+            await db.execute('ALTER TABLE workouts ADD COLUMN weight_moved REAL DEFAULT 0.0');
+            await db.execute("ALTER TABLE workouts ADD COLUMN weight_unit TEXT DEFAULT 'kg'");
+            await db.execute('ALTER TABLE workouts ADD COLUMN total_weight_moved REAL DEFAULT 0.0');
+            await db.execute('ALTER TABLE workouts ADD COLUMN ruck_weight REAL DEFAULT 0.0');
+            await db.execute("ALTER TABLE workouts ADD COLUMN ruck_weight_unit TEXT DEFAULT 'lbs'");
+          }
+        },
+      );
+
+      final templates = await dbV13.query('workout_templates');
+      expect(templates.first['weight_moved'], equals(0.0));
+      expect(templates.first['weight_unit'], equals('kg'));
+      expect(templates.first['ruck_weight'], equals(0.0));
+      expect(templates.first['ruck_weight_unit'], equals('lbs'));
+
+      final workouts = await dbV13.query('workouts');
+      expect(workouts.first['weight_moved'], equals(0.0));
+      expect(workouts.first['weight_unit'], equals('kg'));
+      expect(workouts.first['total_weight_moved'], equals(0.0));
+      expect(workouts.first['ruck_weight'], equals(0.0));
+      expect(workouts.first['ruck_weight_unit'], equals('lbs'));
+
+      await dbV13.close();
+    });
   });
 }

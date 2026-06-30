@@ -236,6 +236,10 @@ class SyncService extends ChangeNotifier {
         'treadmill_workout': local['treadmill_workout'] ?? 0,
         'work_speed': local['work_speed'] ?? 4.0,
         'rest_speed': local['rest_speed'] ?? 0.0,
+        'weight_moved': local['weight_moved'] ?? 0.0,
+        'weight_unit': local['weight_unit'] ?? 'kg',
+        'ruck_weight': local['ruck_weight'] ?? 0.0,
+        'ruck_weight_unit': local['ruck_weight_unit'] ?? 'lbs',
       }, SetOptions(merge: true));
     }
 
@@ -261,6 +265,10 @@ class SyncService extends ChangeNotifier {
           'treadmill_workout': data['treadmill_workout'] ?? 0,
           'work_speed': data['work_speed'] ?? 4.0,
           'rest_speed': data['rest_speed'] ?? 0.0,
+          'weight_moved': data['weight_moved'] ?? 0.0,
+          'weight_unit': data['weight_unit'] ?? 'kg',
+          'ruck_weight': data['ruck_weight'] ?? 0.0,
+          'ruck_weight_unit': data['ruck_weight_unit'] ?? 'lbs',
         });
         debugPrint('SyncService: Downloaded template $tName for profile $pName');
       } else {
@@ -288,6 +296,18 @@ class SyncService extends ChangeNotifier {
         }
         if (data.containsKey('rest_speed')) {
           updateMap['rest_speed'] = data['rest_speed'] ?? 0.0;
+        }
+        if (data.containsKey('weight_moved')) {
+          updateMap['weight_moved'] = data['weight_moved'] ?? 0.0;
+        }
+        if (data.containsKey('weight_unit')) {
+          updateMap['weight_unit'] = data['weight_unit'] ?? 'kg';
+        }
+        if (data.containsKey('ruck_weight')) {
+          updateMap['ruck_weight'] = data['ruck_weight'] ?? 0.0;
+        }
+        if (data.containsKey('ruck_weight_unit')) {
+          updateMap['ruck_weight_unit'] = data['ruck_weight_unit'] ?? 'lbs';
         }
         await db.update('workout_templates', updateMap,
             where: 'profile_name = ? AND template_name = ?',
@@ -349,6 +369,11 @@ class SyncService extends ChangeNotifier {
           'run_distance': w['run_distance'] ?? 0.0,
           'run_peak_speed': w['run_peak_speed'] ?? 0.0,
           'run_avg_speed': w['run_avg_speed'] ?? 0.0,
+          'weight_moved': w['weight_moved'] ?? 0.0,
+          'weight_unit': w['weight_unit'] ?? 'kg',
+          'total_weight_moved': w['total_weight_moved'] ?? 0.0,
+          'ruck_weight': w['ruck_weight'] ?? 0.0,
+          'ruck_weight_unit': w['ruck_weight_unit'] ?? 'lbs',
           'hr_details': hrDataList,
         });
         
@@ -412,6 +437,11 @@ class SyncService extends ChangeNotifier {
             'run_distance': data['run_distance'] ?? 0.0,
             'run_peak_speed': data['run_peak_speed'] ?? 0.0,
             'run_avg_speed': data['run_avg_speed'] ?? 0.0,
+            'weight_moved': data['weight_moved'] ?? 0.0,
+            'weight_unit': data['weight_unit'] ?? 'kg',
+            'total_weight_moved': data['total_weight_moved'] ?? 0.0,
+            'ruck_weight': data['ruck_weight'] ?? 0.0,
+            'ruck_weight_unit': data['ruck_weight_unit'] ?? 'lbs',
           });
           
           final List<dynamic> hrDetails = data['hr_details'] ?? [];
@@ -427,11 +457,34 @@ class SyncService extends ChangeNotifier {
       } else {
         final localNotes = localW['notes'] as String? ?? '';
         final remoteNotes = data['notes'] as String? ?? '';
+        
+        final localWeight = (localW['weight_moved'] as num?)?.toDouble() ?? 0.0;
+        final remoteWeight = (data['weight_moved'] as num?)?.toDouble() ?? 0.0;
+        final localRuck = (localW['ruck_weight'] as num?)?.toDouble() ?? 0.0;
+        final remoteRuck = (data['ruck_weight'] as num?)?.toDouble() ?? 0.0;
+
+        final updateMap = <String, dynamic>{};
+        
         if (localNotes != remoteNotes && localNotes.isEmpty && remoteNotes.isNotEmpty) {
-          debugPrint('SyncService: Downloading updated notes for $docId...');
+          updateMap['notes'] = remoteNotes;
+        }
+        
+        if (localWeight == 0.0 && remoteWeight > 0.0) {
+          updateMap['weight_moved'] = remoteWeight;
+          updateMap['weight_unit'] = data['weight_unit'] ?? 'kg';
+          updateMap['total_weight_moved'] = (data['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
+        }
+        
+        if (localRuck == 0.0 && remoteRuck > 0.0) {
+          updateMap['ruck_weight'] = remoteRuck;
+          updateMap['ruck_weight_unit'] = data['ruck_weight_unit'] ?? 'lbs';
+        }
+        
+        if (updateMap.isNotEmpty) {
+          debugPrint('SyncService: Downloading updated fields for $docId: $updateMap');
           await db.update(
             'workouts',
-            {'notes': remoteNotes},
+            updateMap,
             where: 'id = ?',
             whereArgs: [localW['id']],
           );

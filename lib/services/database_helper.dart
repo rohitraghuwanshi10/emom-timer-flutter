@@ -112,7 +112,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 12,
+        version: 13,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -232,6 +232,22 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for profiles updated_at: $e');
             }
           }
+          if (oldVersion < 13) {
+            try {
+              await db.execute('ALTER TABLE workout_templates ADD COLUMN weight_moved REAL DEFAULT 0.0');
+              await db.execute("ALTER TABLE workout_templates ADD COLUMN weight_unit TEXT DEFAULT 'kg'");
+              await db.execute('ALTER TABLE workout_templates ADD COLUMN ruck_weight REAL DEFAULT 0.0');
+              await db.execute("ALTER TABLE workout_templates ADD COLUMN ruck_weight_unit TEXT DEFAULT 'lbs'");
+              
+              await db.execute('ALTER TABLE workouts ADD COLUMN weight_moved REAL DEFAULT 0.0');
+              await db.execute("ALTER TABLE workouts ADD COLUMN weight_unit TEXT DEFAULT 'kg'");
+              await db.execute('ALTER TABLE workouts ADD COLUMN total_weight_moved REAL DEFAULT 0.0');
+              await db.execute('ALTER TABLE workouts ADD COLUMN ruck_weight REAL DEFAULT 0.0');
+              await db.execute("ALTER TABLE workouts ADD COLUMN ruck_weight_unit TEXT DEFAULT 'lbs'");
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 13: $e');
+            }
+          }
         },
       ),
     );
@@ -275,6 +291,10 @@ class DatabaseHelper {
           treadmill_workout INTEGER DEFAULT 0,
           work_speed REAL DEFAULT 4.0,
           rest_speed REAL DEFAULT 0.0,
+          weight_moved REAL DEFAULT 0.0,
+          weight_unit TEXT DEFAULT 'kg',
+          ruck_weight REAL DEFAULT 0.0,
+          ruck_weight_unit TEXT DEFAULT 'lbs',
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE,
           UNIQUE(profile_name, template_name)
       )
@@ -302,6 +322,11 @@ class DatabaseHelper {
           run_distance REAL DEFAULT 0.0,
           run_peak_speed REAL DEFAULT 0.0,
           run_avg_speed REAL DEFAULT 0.0,
+          weight_moved REAL DEFAULT 0.0,
+          weight_unit TEXT DEFAULT 'kg',
+          total_weight_moved REAL DEFAULT 0.0,
+          ruck_weight REAL DEFAULT 0.0,
+          ruck_weight_unit TEXT DEFAULT 'lbs',
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE
       )
     ''');
@@ -369,10 +394,15 @@ class DatabaseHelper {
     double runDistance = 0.0,
     double runPeakSpeed = 0.0,
     double runAvgSpeed = 0.0,
+    double weightMoved = 0.0,
+    String weightUnit = 'kg',
+    double ruckWeight = 0.0,
+    String ruckWeightUnit = 'lbs',
   }) async {
     final db = await database;
     try {
       return await db.transaction((txn) async {
+        final double totalWeightMoved = totalRoundsCompleted * weightMoved;
         final workoutId = await txn.insert('workouts', {
           'profile_name': profileName,
           'workout_name': workoutName,
@@ -392,6 +422,11 @@ class DatabaseHelper {
           'run_distance': runDistance,
           'run_peak_speed': runPeakSpeed,
           'run_avg_speed': runAvgSpeed,
+          'weight_moved': weightMoved,
+          'weight_unit': weightUnit,
+          'total_weight_moved': totalWeightMoved,
+          'ruck_weight': ruckWeight,
+          'ruck_weight_unit': ruckWeightUnit,
         });
 
         for (var log in hrLogs) {
