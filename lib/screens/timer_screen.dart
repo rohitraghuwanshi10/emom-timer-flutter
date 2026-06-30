@@ -1522,8 +1522,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final availableHeight = constraints.maxHeight;
-                        // Dynamically size timer circle to fit height nicely (leave ~80px for spacing/controls)
-                        final timerSize = (availableHeight - 80).clamp(130.0, 220.0);
+                        // Dynamically size timer circle to fit height nicely (leave ~90px for spacing/controls)
+                        final timerSize = (availableHeight - 90).clamp(140.0, 260.0);
 
                         return Center(
                           child: SingleChildScrollView(
@@ -1678,24 +1678,34 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   }
 
   Widget _buildInlineControls(bool isIdle, bool showTreadmillStop) {
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
     if (isIdle) {
       return ElevatedButton.icon(
         onPressed: _startWorkout,
         style: ElevatedButton.styleFrom(
           backgroundColor: Theme.of(context).colorScheme.secondary,
           foregroundColor: Theme.of(context).colorScheme.onSecondary,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: EdgeInsets.symmetric(
+            horizontal: isLandscape ? 32 : 20,
+            vertical: isLandscape ? 16 : 12,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        icon: const Icon(Icons.play_arrow),
-        label: const Text('Start', style: TextStyle(fontWeight: FontWeight.bold)),
+        icon: Icon(Icons.play_arrow, size: isLandscape ? 22 : 18),
+        label: Text(
+          'Start',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: isLandscape ? 15 : 14,
+          ),
+        ),
       );
     }
 
     return Wrap(
-      spacing: 8,
+      spacing: isLandscape ? 12 : 8,
       runSpacing: 8,
       alignment: WrapAlignment.center,
       children: [
@@ -1706,13 +1716,25 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                 ? Theme.of(context).colorScheme.secondary 
                 : Colors.orange,
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: EdgeInsets.symmetric(
+              horizontal: isLandscape ? 20 : 12,
+              vertical: isLandscape ? 14 : 8,
+            ),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
           ),
-          icon: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause, size: 14),
-          label: Text(_currentEvent.state == WorkoutState.PAUSED ? 'Resume' : 'Pause', style: const TextStyle(fontSize: 11)),
+          icon: Icon(
+            _currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause,
+            size: isLandscape ? 18 : 14,
+          ),
+          label: Text(
+            _currentEvent.state == WorkoutState.PAUSED ? 'Resume' : 'Pause',
+            style: TextStyle(
+              fontSize: isLandscape ? 13 : 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
         if (showTreadmillStop)
           ElevatedButton.icon(
@@ -1723,26 +1745,49 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: EdgeInsets.symmetric(
+                horizontal: isLandscape ? 16 : 10,
+                vertical: isLandscape ? 14 : 8,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            icon: const Icon(Icons.pan_tool, size: 12, color: Colors.white),
-            label: const Text('STOP TM', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+            icon: Icon(
+              Icons.pan_tool,
+              size: isLandscape ? 16 : 12,
+              color: Colors.white,
+            ),
+            label: Text(
+              'STOP TM',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: isLandscape ? 13 : 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ElevatedButton.icon(
           onPressed: _stopWorkout,
           style: ElevatedButton.styleFrom(
             backgroundColor: Theme.of(context).colorScheme.error,
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: EdgeInsets.symmetric(
+              horizontal: isLandscape ? 20 : 12,
+              vertical: isLandscape ? 14 : 8,
+            ),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
           ),
-          icon: const Icon(Icons.stop, size: 14),
-          label: const Text('End', style: TextStyle(fontSize: 11)),
+          icon: Icon(Icons.stop, size: isLandscape ? 18 : 14),
+          label: Text(
+            'End',
+            style: TextStyle(
+              fontSize: isLandscape ? 13 : 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
       ],
     );
