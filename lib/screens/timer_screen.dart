@@ -937,119 +937,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
 
 
-  Widget _buildTemplateHeader() {
-    if (_loadedTemplateName == null) return const SizedBox.shrink();
-    
-    final isModified = _isTemplateModified;
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.star, color: Theme.of(context).colorScheme.primary, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _loadedTemplateName!,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              if (isModified)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.edit, size: 10, color: Colors.orange),
-                      SizedBox(width: 4),
-                      Text(
-                        'Modified',
-                        style: TextStyle(
-                          color: Colors.orange,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-               OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _loadedTemplateName = null;
-                    _loadedTemplate = null;
-                    _treadmillWorkout = false;
-                    TreadmillBluetoothService.instance.autoSpeedSync = false;
-                    _autoRegulationEnabled = _isBluetoothConnected && _maxPreworkHr > 0;
-                    _weightMoved = 0.0;
-                    _weightUnit = 'kg';
-                    _ruckWeight = 0.0;
-                    _ruckWeightUnit = 'lbs';
-                  });
-                },
-                icon: const Icon(Icons.close, size: 14),
-                label: const Text('Unload', style: TextStyle(fontSize: 12)),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                  side: BorderSide(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-              if (isModified) ...[
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    if (_loadedTemplate != null) {
-                      loadTemplate(_loadedTemplate!);
-                    }
-                  },
-                  icon: const Icon(Icons.undo, size: 14),
-                  label: const Text('Reset', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange.withValues(alpha: 0.2),
-                    foregroundColor: Colors.orange,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildWorkoutSummaryCard() {
     final isTreadmill = TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout;
@@ -1068,10 +956,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_loadedTemplateName != null && MediaQuery.of(context).orientation != Orientation.landscape) ...[
-              _buildTemplateHeader(),
-              const SizedBox(height: 12),
-            ],
             // A clean 2x2 grid of key stats
             Row(
               children: [
@@ -1418,7 +1302,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       appBar: isLandscape
           ? null
           : AppBar(
-              title: const Text('ChronoPulse Active'),
+              title: null,
               actions: [
                 _buildProfileSelectorAction(isIdle),
                 IconButton(
@@ -1552,34 +1436,68 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     const SizedBox(height: 16),
-                    if (_loadedTemplateName != null && !isIdle) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.star_outline,
-                              size: 16,
-                              color: Theme.of(context).colorScheme.primary,
+                    if (_loadedTemplateName != null) ...[
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _loadedTemplateName! + (_isTemplateModified ? ' (Modified)' : ''),
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.star_outline,
+                                size: 14,
                                 color: Theme.of(context).colorScheme.primary,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 6),
+                              Text(
+                                _loadedTemplateName! + (_isTemplateModified ? ' (Modified)' : ''),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                              if (isIdle) ...[
+                                if (_isTemplateModified) ...[
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (_loadedTemplate != null) {
+                                        loadTemplate(_loadedTemplate!);
+                                      }
+                                    },
+                                    child: Icon(
+                                      Icons.undo,
+                                      size: 14,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 8),
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _loadedTemplateName = null;
+                                      _loadedTemplate = null;
+                                      _treadmillWorkout = false;
+                                    });
+                                  },
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
