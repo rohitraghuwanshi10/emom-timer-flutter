@@ -893,6 +893,8 @@ class LibraryScreenState extends State<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool useHorizontalLayout = isLandscape || screenWidth > 680;
     return Scaffold(
       appBar: isLandscape
           ? null
@@ -1073,9 +1075,9 @@ class LibraryScreenState extends State<LibraryScreen> {
                         child: Padding(
                           padding: EdgeInsets.symmetric(
                             horizontal: 16,
-                            vertical: isLandscape ? 4 : 8,
+                            vertical: useHorizontalLayout ? 4 : 8,
                           ),
-                          child: isLandscape
+                          child: useHorizontalLayout
                               ? Row(
                                   children: [
                                     // Left: Title + Badges

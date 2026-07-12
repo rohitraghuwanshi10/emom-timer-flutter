@@ -6,9 +6,5 @@
 	<false/>
 	<key>com.apple.security.device.bluetooth</key>
 	<true/>
-	<key>keychain-access-groups</key>
-	<array>
-		<string>$(AppIdentifierPrefix)com.rohitraghuwanshi.emomTimerFlutter</string>
-	</array>
 </dict>
 </plist>
