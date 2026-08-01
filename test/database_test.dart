@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
+import 'package:emom_timer_flutter/services/database_helper.dart';
 
 void main() {
   // Initialize FFI for tests
@@ -742,6 +743,352 @@ void main() {
       expect(workouts.first['ruck_weight_unit'], equals('lbs'));
 
       await dbV13.close();
+    });
+
+    test('Migration from version 13 to 14 adds reps_per_round columns successfully', () async {
+      final dbPath = '${await getDatabasesPath()}/migration_v13_to_v14.db';
+      await deleteDatabase(dbPath);
+
+      final db = await openDatabase(
+        dbPath,
+        version: 13,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workout_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_name TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workout_name TEXT
+            )
+          ''');
+        },
+      );
+
+      await db.insert('workout_templates', {'template_name': 'Strength Template'});
+      await db.insert('workouts', {'workout_name': 'Strength Session'});
+      await db.close();
+
+      final dbV14 = await openDatabase(
+        dbPath,
+        version: 14,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 14) {
+            await db.execute('ALTER TABLE workout_templates ADD COLUMN reps_per_round INTEGER DEFAULT 1');
+            await db.execute('ALTER TABLE workouts ADD COLUMN reps_per_round INTEGER DEFAULT 1');
+          }
+        },
+      );
+
+      final templates = await dbV14.query('workout_templates');
+      expect(templates.first['reps_per_round'], equals(1));
+
+      final workouts = await dbV14.query('workouts');
+      expect(workouts.first['reps_per_round'], equals(1));
+
+      await dbV14.close();
+    });
+  });
+
+  group('DatabaseHelper Tonnage Tests', () {
+    late String dbPath;
+    late Database db;
+
+    setUp(() async {
+      final dbDir = await databaseFactory.getDatabasesPath();
+      dbPath = p.join(dbDir, 'test_db_tonnage.db');
+      try {
+        await deleteDatabase(dbPath);
+      } catch (_) {}
+      
+      // Initialize a test database matching schema version 15
+      db = await openDatabase(
+        dbPath,
+        version: 15,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                max_hr INTEGER,
+                max_prework_hr INTEGER,
+                sex TEXT,
+                birth_date TEXT,
+                weight_kg REAL,
+                weight_unit_pref TEXT,
+                distance_unit_pref TEXT DEFAULT 'km',
+                auto_connect_hr INTEGER,
+                health_enabled INTEGER DEFAULT 0,
+                save_history INTEGER DEFAULT 1,
+                treadmill_enabled INTEGER DEFAULT 0,
+                treadmill_preset_1 REAL DEFAULT 2.0,
+                treadmill_preset_2 REAL DEFAULT 4.0,
+                treadmill_preset_3 REAL DEFAULT 6.0,
+                updated_at TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_name TEXT,
+                workout_name TEXT,
+                start_time TEXT NOT NULL,
+                end_time TEXT,
+                total_rounds_completed INTEGER,
+                work_duration INTEGER,
+                rest_duration INTEGER,
+                total_time_sec INTEGER,
+                work_time_sec INTEGER,
+                rest_time_sec INTEGER,
+                max_hr INTEGER,
+                avg_hr INTEGER,
+                calories_burnt_kcal REAL,
+                notes TEXT,
+                details_file_legacy TEXT,
+                activity_type TEXT DEFAULT 'HIIT',
+                run_distance REAL DEFAULT 0.0,
+                run_peak_speed REAL DEFAULT 0.0,
+                run_avg_speed REAL DEFAULT 0.0,
+                weight_moved REAL DEFAULT 0.0,
+                weight_unit TEXT DEFAULT 'kg',
+                total_weight_moved REAL DEFAULT 0.0,
+                ruck_weight REAL DEFAULT 0.0,
+                ruck_weight_unit TEXT DEFAULT 'lbs',
+                reps_per_round INTEGER DEFAULT 1,
+                reps_completed INTEGER DEFAULT 0,
+                FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS heart_rate_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workout_id INTEGER,
+                capture_time TEXT,
+                bpm INTEGER,
+                zone TEXT,
+                FOREIGN KEY(workout_id) REFERENCES workouts(id) ON DELETE CASCADE
+            )
+          ''');
+          
+          await db.insert('profiles', {
+            'name': 'Test User',
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        },
+      );
+      
+      DatabaseHelper.instance.setDatabaseForTesting(db);
+    });
+
+    tearDown(() async {
+      await db.close();
+      try {
+        await deleteDatabase(dbPath);
+      } catch (_) {}
+    });
+
+    test('saveWorkout calculates total tonnage as rounds * reps_per_round * weight', () async {
+      final workoutId = await DatabaseHelper.instance.saveWorkout(
+        profileName: 'Test User',
+        workoutName: 'ABC Strength',
+        startTime: '2026-07-12T12:00:00',
+        endTime: '2026-07-12T12:15:00',
+        totalRoundsCompleted: 10,
+        workDuration: 60,
+        restDuration: 0,
+        totalTimeSec: 600,
+        workTimeSec: 600,
+        restTimeSec: 0,
+        maxHr: 160,
+        avgHr: 140,
+        caloriesBurntKcal: 150.0,
+        notes: 'Felt strong',
+        hrLogs: [],
+        activityType: 'STRENGTH',
+        weightMoved: 24.0,
+        weightUnit: 'kg',
+        repsPerRound: 6,
+      );
+
+      expect(workoutId, isNotNull);
+
+      final logged = await db.query('workouts', where: 'id = ?', whereArgs: [workoutId]);
+      expect(logged.length, equals(1));
+      expect(logged.first['reps_per_round'], equals(6));
+      expect(logged.first['weight_moved'], equals(24.0));
+      // Tonnage: 10 rounds * 6 reps * 24.0 kg = 1440.0
+      expect(logged.first['total_weight_moved'], equals(1440.0));
+    });
+
+    test('Migration from version 14 to 15 adds reps_completed and retroactively calculates reps and tonnage', () async {
+      final dbPath = '${await getDatabasesPath()}/migration_v14_to_v15.db';
+      await deleteDatabase(dbPath);
+
+      // Create v14 schema
+      final db = await openDatabase(
+        dbPath,
+        version: 14,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                total_rounds_completed INTEGER,
+                weight_moved REAL DEFAULT 0.0,
+                total_weight_moved REAL DEFAULT 0.0,
+                reps_per_round INTEGER DEFAULT 1
+            )
+          ''');
+        },
+      );
+
+      // Insert pre-existing v14 workout (e.g. ABC: 5 rounds, 24kg, 6 reps per round, but tonnage was only 120kg under old logic)
+      await db.insert('workouts', {
+        'total_rounds_completed': 5,
+        'weight_moved': 24.0,
+        'total_weight_moved': 120.0, // rounds * weight (5 * 24)
+        'reps_per_round': 6,
+      });
+      await db.close();
+
+      // Open database with version 15 to trigger the upgrade migration
+      final dbV15 = await openDatabase(
+        dbPath,
+        version: 15,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 15) {
+            await db.execute('ALTER TABLE workouts ADD COLUMN reps_completed INTEGER DEFAULT 0');
+            await db.execute('UPDATE workouts SET reps_completed = total_rounds_completed * reps_per_round WHERE reps_per_round IS NOT NULL');
+            await db.execute('UPDATE workouts SET total_weight_moved = total_rounds_completed * reps_per_round * weight_moved WHERE reps_per_round IS NOT NULL AND weight_moved > 0.0');
+          }
+        },
+      );
+
+      // Verify that reps_completed is now 30 (5 * 6) and total_weight_moved is 720.0 (5 * 6 * 24)
+      final workouts = await dbV15.query('workouts');
+      expect(workouts.length, equals(1));
+      expect(workouts.first['reps_completed'], equals(30));
+      expect(workouts.first['total_weight_moved'], equals(720.0));
+
+      await dbV15.close();
+    });
+
+    test('saveWorkout correctly stores repsCompleted parameter for HIIT/other workouts', () async {
+      final workoutId = await DatabaseHelper.instance.saveWorkout(
+        profileName: 'Test User',
+        workoutName: 'HIIT Session',
+        startTime: '2026-07-12T13:00:00',
+        endTime: '2026-07-12T13:15:00',
+        totalRoundsCompleted: 10,
+        workDuration: 60,
+        restDuration: 10,
+        totalTimeSec: 700,
+        workTimeSec: 600,
+        restTimeSec: 100,
+        maxHr: 150,
+        avgHr: 130,
+        caloriesBurntKcal: 100.0,
+        notes: 'HIIT notes',
+        hrLogs: [],
+        activityType: 'HIIT',
+        repsCompleted: 120, // manually logged reps
+      );
+
+      expect(workoutId, isNotNull);
+
+      final logged = await db.query('workouts', where: 'id = ?', whereArgs: [workoutId]);
+      expect(logged.length, equals(1));
+      expect(logged.first['reps_completed'], equals(120));
+      expect(logged.first['total_weight_moved'], equals(0.0)); // since weightMoved = 0.0
+    });
+
+    test('Migration from version 15 to 16 updates reps_per_round from template and corrects reps and tonnage', () async {
+      final dbPath = '${await getDatabasesPath()}/migration_v15_to_v16.db';
+      await deleteDatabase(dbPath);
+
+      // Create v15 schema
+      final db = await openDatabase(
+        dbPath,
+        version: 15,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workout_templates (
+                profile_name TEXT,
+                template_name TEXT,
+                reps_per_round INTEGER DEFAULT 1
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_name TEXT,
+                workout_name TEXT,
+                total_rounds_completed INTEGER,
+                weight_moved REAL DEFAULT 0.0,
+                total_weight_moved REAL DEFAULT 0.0,
+                reps_per_round INTEGER DEFAULT 1,
+                reps_completed INTEGER DEFAULT 0
+            )
+          ''');
+        },
+      );
+
+      // Insert template with 6 reps per round
+      await db.insert('workout_templates', {
+        'profile_name': 'Rohit',
+        'template_name': 'ABC - Double 18KG more rest',
+        'reps_per_round': 6,
+      });
+
+      // Insert workout completed with reps_per_round = 1 (pre-existing v14 row defaulted to 1)
+      await db.insert('workouts', {
+        'profile_name': 'Rohit',
+        'workout_name': 'ABC - Double 18KG more rest',
+        'total_rounds_completed': 18,
+        'weight_moved': 36.0,
+        'total_weight_moved': 648.0, // 18 * 1 * 36.0
+        'reps_per_round': 1,
+        'reps_completed': 18, // 18 * 1
+      });
+      await db.close();
+
+      // Open database with version 16 to trigger the upgrade migration
+      final dbV16 = await openDatabase(
+        dbPath,
+        version: 16,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 16) {
+            await db.execute('''
+              UPDATE workouts 
+              SET reps_per_round = (
+                SELECT reps_per_round 
+                FROM workout_templates 
+                WHERE workout_templates.template_name = workouts.workout_name 
+                  AND workout_templates.profile_name = workouts.profile_name
+              )
+              WHERE EXISTS (
+                SELECT 1 
+                FROM workout_templates 
+                WHERE workout_templates.template_name = workouts.workout_name 
+                  AND workout_templates.profile_name = workouts.profile_name
+              )
+            ''');
+            await db.execute('UPDATE workouts SET reps_completed = total_rounds_completed * reps_per_round WHERE reps_per_round IS NOT NULL');
+            await db.execute('UPDATE workouts SET total_weight_moved = total_rounds_completed * reps_per_round * weight_moved WHERE reps_per_round IS NOT NULL AND weight_moved > 0.0');
+          }
+        },
+      );
+
+      // Verify that reps_per_round is now 6, reps_completed is 108 (18 * 6) and total_weight_moved is 3888.0 (18 * 6 * 36)
+      final workouts = await dbV16.query('workouts');
+      expect(workouts.length, equals(1));
+      expect(workouts.first['reps_per_round'], equals(6));
+      expect(workouts.first['reps_completed'], equals(108));
+      expect(workouts.first['total_weight_moved'], equals(3888.0));
+
+      await dbV16.close();
     });
   });
 }

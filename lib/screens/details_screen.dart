@@ -103,7 +103,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       final bool isMetric = _distanceUnitPref == 'km';
       final String distUnit = isMetric ? 'km' : 'mi';
       final String speedUnit = isMetric ? 'km/h' : 'mph';
-      csvBuffer.writeln('Workout,Start Time,Rounds,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),Calories (kcal),Run Dist ($distUnit),Run Peak Speed ($speedUnit),Run Avg Speed ($speedUnit),Weight Moved,Weight Unit,Total Weight Moved,Ruck Weight,Ruck Weight Unit,Notes');
+      csvBuffer.writeln('Workout,Start Time,Rounds,Reps Completed,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),Calories (kcal),Run Dist ($distUnit),Run Peak Speed ($speedUnit),Run Avg Speed ($speedUnit),Weight Moved,Weight Unit,Total Weight Moved,Ruck Weight,Ruck Weight Unit,Notes');
 
       for (int i = 0; i < _workouts.length; i++) {
         final w = _workouts[i];
@@ -136,6 +136,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
         final String runPeak = displayPeak.toStringAsFixed(1);
         final String runAvg = displayAvg.toStringAsFixed(1);
 
+        final int repsCompleted = w['reps_completed'] as int? ?? 0;
         final double weightMoved = (w['weight_moved'] as num?)?.toDouble() ?? 0.0;
         final String weightUnit = w['weight_unit'] as String? ?? 'kg';
         final double totalWeightMoved = (w['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
@@ -155,7 +156,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
         if (escapedName.contains(',') || escapedName.contains('"') || escapedName.contains('\n') || escapedName.contains('\r')) {
           escapedName = '"${escapedName.replaceAll('"', '""')}"';
         }
-        csvBuffer.writeln('$escapedName,$startStr,$rounds,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$runDist,$runPeak,$runAvg,$weightMoved,$weightUnit,$totalWeightMoved,$ruckWeight,$ruckWeightUnit,$notes');
+        csvBuffer.writeln('$escapedName,$startStr,$rounds,$repsCompleted,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$runDist,$runPeak,$runAvg,$weightMoved,$weightUnit,$totalWeightMoved,$ruckWeight,$ruckWeightUnit,$notes');
       }
 
       // Write to file
@@ -194,17 +195,35 @@ class _DetailsScreenState extends State<DetailsScreen> {
   }
 
   Future<void> _editWorkoutNotes(Map<String, dynamic> w) async {
-    final controller = TextEditingController(text: w['notes'] as String? ?? '');
+    final notesController = TextEditingController(text: w['notes'] as String? ?? '');
+    final repsController = TextEditingController(text: (w['reps_completed'] as int? ?? 0).toString());
     final bool? saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Edit Workout Notes'),
-        content: TextField(
-          controller: controller,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Enter notes about your workout...',
-            border: OutlineInputBorder(),
+        title: const Text('Edit Workout Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: repsController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Reps Completed',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Workout Notes',
+                  hintText: 'Enter notes about your workout...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
         ),
         actions: [
@@ -215,16 +234,24 @@ class _DetailsScreenState extends State<DetailsScreen> {
           TextButton(
             onPressed: () async {
               try {
+                final int newReps = int.tryParse(repsController.text) ?? 0;
+                final double weightMoved = (w['weight_moved'] as num?)?.toDouble() ?? 0.0;
+                final double newTonnage = newReps * weightMoved;
+
                 final db = await DatabaseHelper.instance.database;
                 await db.update(
                   'workouts',
-                  {'notes': controller.text},
+                  {
+                    'notes': notesController.text,
+                    'reps_completed': newReps,
+                    'total_weight_moved': newTonnage,
+                  },
                   where: 'id = ?',
                   whereArgs: [w['id']],
                 );
                 if (context.mounted) Navigator.pop(context, true);
               } catch (e) {
-                debugPrint('Error updating notes: $e');
+                debugPrint('Error updating workout details: $e');
                 if (context.mounted) Navigator.pop(context, false);
               }
             },
@@ -254,6 +281,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
           DataColumn(label: Text('Workout')),
           DataColumn(label: Text('Start Time')),
           DataColumn(label: Text('Rounds')),
+          DataColumn(label: Text('Reps')),
           DataColumn(label: Text('Total Time')),
           DataColumn(label: Text('Work Time')),
           DataColumn(label: Text('Rest Time')),
@@ -296,18 +324,37 @@ class _DetailsScreenState extends State<DetailsScreen> {
             final totalWeightMoved = (w['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
             final ruckWeight = (w['ruck_weight'] as num?)?.toDouble() ?? 0.0;
             final ruckWeightUnit = w['ruck_weight_unit'] as String? ?? 'lbs';
+            final repsPerRound = w['reps_per_round'] as int? ?? 1;
 
             String weightLoadDisplay = '--';
             if (weightMoved > 0.0) {
-              weightLoadDisplay = '${weightMoved.toStringAsFixed(1)} $weightUnit (${totalWeightMoved.toStringAsFixed(1)} total)';
+              weightLoadDisplay = '${weightMoved.toStringAsFixed(1)} $weightUnit${repsPerRound > 1 ? ' (x$repsPerRound reps)' : ''} (${totalWeightMoved.toStringAsFixed(1)} total)';
             } else if (ruckWeight > 0.0) {
               weightLoadDisplay = '${ruckWeight.toStringAsFixed(1)} $ruckWeightUnit ruck';
             }
+
+            final repsCompleted = w['reps_completed'] as int? ?? 0;
 
             return DataRow(cells: [
               DataCell(Text(name, style: TextStyle(color: wColor, fontWeight: FontWeight.bold))),
             DataCell(Text(startStr)),
             DataCell(Text("${w['total_rounds_completed'] ?? 0}")),
+            DataCell(
+              InkWell(
+                onTap: () => _editWorkoutNotes(w),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      repsCompleted > 0 ? "$repsCompleted" : '--',
+                      style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.edit, size: 12, color: Colors.amber),
+                  ],
+                ),
+              ),
+            ),
             DataCell(Text(_fmtSec(w['total_time_sec']))),
             DataCell(Text(_fmtSec(w['work_time_sec']), style: const TextStyle(color: Color(0xFF0DF2A3)))), // Mint Neon
             DataCell(Text(_fmtSec(w['rest_time_sec']), style: const TextStyle(color: Color(0xFFFF7A00)))), // Vibrant Orange

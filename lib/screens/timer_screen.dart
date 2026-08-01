@@ -65,6 +65,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   String _weightUnit = 'kg';
   double _ruckWeight = 0.0;
   String _ruckWeightUnit = 'lbs';
+  int _repsPerRound = 1;
+  int _repsCompleted = 0;
 
   bool get _isTemplateModified {
     if (_loadedTemplate == null) return false;
@@ -83,11 +85,13 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     final templateWeightUnit = _loadedTemplate!['weight_unit'] as String? ?? 'kg';
     final templateRuckWeight = (_loadedTemplate!['ruck_weight'] as num?)?.toDouble() ?? 0.0;
     final templateRuckWeightUnit = _loadedTemplate!['ruck_weight_unit'] as String? ?? 'lbs';
+    final templateRepsPerRound = _loadedTemplate!['reps_per_round'] as int? ?? 1;
 
     final weightModified = _weightMoved != templateWeightMoved ||
         _weightUnit != templateWeightUnit ||
         _ruckWeight != templateRuckWeight ||
-        _ruckWeightUnit != templateRuckWeightUnit;
+        _ruckWeightUnit != templateRuckWeightUnit ||
+        _repsPerRound != templateRepsPerRound;
 
     return _totalRounds != _loadedTemplate!['rounds'] ||
         _workDuration != _loadedTemplate!['work_time'] ||
@@ -204,6 +208,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         _weightUnit = template['weight_unit'] as String? ?? 'kg';
         _ruckWeight = (template['ruck_weight'] as num?)?.toDouble() ?? 0.0;
         _ruckWeightUnit = template['ruck_weight_unit'] as String? ?? 'lbs';
+        _repsPerRound = template['reps_per_round'] as int? ?? 1;
       });
       if (_currentEvent.state == WorkoutState.FINISHED) _resetToIdle();
     }
@@ -418,6 +423,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         TreadmillBluetoothService.instance.isConnected) {
       TreadmillBluetoothService.instance.stop();
     }
+    _repsCompleted = 0;
     setState(() {
       _currentEvent = WorkoutEvent(
         state: WorkoutState.IDLE,
@@ -671,6 +677,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         weightUnit: _weightUnit,
         ruckWeight: ruckWeightToSave,
         ruckWeightUnit: _ruckWeightUnit,
+        repsPerRound: _repsPerRound,
+        repsCompleted: _repsCompleted > 0 ? _repsCompleted : (completedRounds * _repsPerRound),
       );
       
       debugPrint("TimerScreen: _healthEnabled is $_healthEnabled");
@@ -2443,6 +2451,8 @@ class _CustomizeWorkoutSheet extends StatefulWidget {
 class _CustomizeWorkoutSheetState extends State<_CustomizeWorkoutSheet> {
   late final TextEditingController _weightController;
   late final TextEditingController _ruckWeightController;
+  late final TextEditingController _repsController;
+  late final TextEditingController _repsCompletedController;
 
   @override
   void initState() {
@@ -2453,12 +2463,20 @@ class _CustomizeWorkoutSheetState extends State<_CustomizeWorkoutSheet> {
     _ruckWeightController = TextEditingController(
       text: widget.timerState._ruckWeight > 0 ? widget.timerState._ruckWeight.toString() : '',
     );
+    _repsController = TextEditingController(
+      text: widget.timerState._repsPerRound.toString(),
+    );
+    _repsCompletedController = TextEditingController(
+      text: widget.timerState._repsCompleted > 0 ? widget.timerState._repsCompleted.toString() : '',
+    );
   }
 
   @override
   void dispose() {
     _weightController.dispose();
     _ruckWeightController.dispose();
+    _repsController.dispose();
+    _repsCompletedController.dispose();
     super.dispose();
   }
 
@@ -2826,46 +2844,66 @@ class _CustomizeWorkoutSheetState extends State<_CustomizeWorkoutSheet> {
                       if (isStrength) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Expanded(
-                                flex: 3,
-                                child: TextField(
-                                  controller: _weightController,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  decoration: const InputDecoration(
-                                    labelText: 'Lifting Weight per Round',
-                                    hintText: '0.0',
-                                    border: OutlineInputBorder(),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: TextField(
+                                      controller: _weightController,
+                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      decoration: const InputDecoration(
+                                        labelText: 'Lifting Weight per Round',
+                                        hintText: '0.0',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      onChanged: (val) {
+                                        _updateState(() {
+                                          widget.timerState._weightMoved = double.tryParse(val) ?? 0.0;
+                                        });
+                                      },
+                                    ),
                                   ),
-                                  onChanged: (val) {
-                                    _updateState(() {
-                                      widget.timerState._weightMoved = double.tryParse(val) ?? 0.0;
-                                    });
-                                  },
-                                ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    flex: 2,
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: widget.timerState._weightUnit,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Unit',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(value: 'kg', child: Text('kg')),
+                                        DropdownMenuItem(value: 'lbs', child: Text('lbs')),
+                                      ],
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          _updateState(() {
+                                            widget.timerState._weightUnit = val;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                flex: 2,
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: widget.timerState._weightUnit,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Unit',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  items: const [
-                                    DropdownMenuItem(value: 'kg', child: Text('kg')),
-                                    DropdownMenuItem(value: 'lbs', child: Text('lbs')),
-                                  ],
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      _updateState(() {
-                                        widget.timerState._weightUnit = val;
-                                      });
-                                    }
-                                  },
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _repsController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Reps per Round (Tonnage Multiplier)',
+                                  hintText: '1',
+                                  border: OutlineInputBorder(),
                                 ),
+                                onChanged: (val) {
+                                  _updateState(() {
+                                    widget.timerState._repsPerRound = int.tryParse(val) ?? 1;
+                                  });
+                                },
                               ),
                             ],
                           ),
@@ -3054,6 +3092,22 @@ class _CustomizeWorkoutSheetState extends State<_CustomizeWorkoutSheet> {
                       ),
                     ],
                   ],
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _repsCompletedController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Total Reps Completed',
+                      hintText: 'Enter total reps completed (e.g. pullups, pushups)...',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.fitness_center),
+                    ),
+                    onChanged: (val) {
+                      _updateState(() {
+                        widget.timerState._repsCompleted = int.tryParse(val) ?? 0;
+                      });
+                    },
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: widget.timerState._notesController,

@@ -379,9 +379,11 @@ class LibraryScreenState extends State<LibraryScreen> {
     String weightUnit = isEditing ? template['weight_unit'] as String? ?? 'kg' : 'kg';
     final double rawRuckWeight = isEditing ? (template['ruck_weight'] as num?)?.toDouble() ?? 0.0 : 0.0;
     String ruckWeightUnit = isEditing ? template['ruck_weight_unit'] as String? ?? 'lbs' : 'lbs';
+    final int rawRepsPerRound = isEditing ? template['reps_per_round'] as int? ?? 1 : 1;
 
     final weightController = TextEditingController(text: rawWeightMoved > 0 ? rawWeightMoved.toString() : '');
     final ruckWeightController = TextEditingController(text: rawRuckWeight > 0 ? rawRuckWeight.toString() : '');
+    final repsController = TextEditingController(text: rawRepsPerRound.toString());
 
     showModalBottomSheet(
       context: context,
@@ -446,40 +448,55 @@ class LibraryScreenState extends State<LibraryScreen> {
                       builder: (context) {
                         final bool isStrength = const {'STRENGTH', 'FUNCTIONAL_STRENGTH', 'CALISTHENICS'}.contains(activityType);
                         if (isStrength) {
-                          return Row(
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Expanded(
-                                flex: 3,
-                                child: TextField(
-                                  controller: weightController,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  decoration: const InputDecoration(
-                                    labelText: 'Lifting Weight per Round',
-                                    hintText: '0.0',
-                                    border: OutlineInputBorder(),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: TextField(
+                                      controller: weightController,
+                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      decoration: const InputDecoration(
+                                        labelText: 'Lifting Weight per Round',
+                                        hintText: '0.0',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    flex: 2,
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: weightUnit,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Unit',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(value: 'kg', child: Text('kg')),
+                                        DropdownMenuItem(value: 'lbs', child: Text('lbs')),
+                                      ],
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setModalState(() {
+                                            weightUnit = val;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                flex: 2,
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: weightUnit,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Unit',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  items: const [
-                                    DropdownMenuItem(value: 'kg', child: Text('kg')),
-                                    DropdownMenuItem(value: 'lbs', child: Text('lbs')),
-                                  ],
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setModalState(() {
-                                        weightUnit = val;
-                                      });
-                                    }
-                                  },
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: repsController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Reps per Round (Tonnage Multiplier)',
+                                  hintText: '1',
+                                  border: OutlineInputBorder(),
                                 ),
                               ),
                             ],
@@ -806,6 +823,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                           final String dbWeightUnit = weightUnit;
                           final double dbRuckWeight = !isStrength ? (double.tryParse(ruckWeightController.text) ?? 0.0) : 0.0;
                           final String dbRuckWeightUnit = ruckWeightUnit;
+                          final int dbRepsPerRound = isStrength ? (int.tryParse(repsController.text) ?? 1) : 1;
 
                           if (isEditing) {
                             // Update template in DB
@@ -827,6 +845,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                                 'weight_unit': dbWeightUnit,
                                 'ruck_weight': dbRuckWeight,
                                 'ruck_weight_unit': dbRuckWeightUnit,
+                                'reps_per_round': dbRepsPerRound,
                               },
                               where: 'id = ?',
                               whereArgs: [template['id']],
@@ -858,6 +877,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                                 'weight_unit': dbWeightUnit,
                                 'ruck_weight': dbRuckWeight,
                                 'ruck_weight_unit': dbRuckWeightUnit,
+                                'reps_per_round': dbRepsPerRound,
                               },
                               conflictAlgorithm: ConflictAlgorithm.replace,
                             );
@@ -1050,11 +1070,12 @@ class LibraryScreenState extends State<LibraryScreen> {
                       final weightUnit = t['weight_unit'] as String? ?? 'kg';
                       final ruckWeight = (t['ruck_weight'] as num?)?.toDouble() ?? 0.0;
                       final ruckWeightUnit = t['ruck_weight_unit'] as String? ?? 'lbs';
+                      final repsPerRound = t['reps_per_round'] as int? ?? 1;
                       final isStrength = const {'STRENGTH', 'FUNCTIONAL_STRENGTH', 'CALISTHENICS'}.contains(type);
                       
                       String weightStr = '';
                       if (isStrength && weightMoved > 0.0) {
-                        weightStr = '  •  ${weightMoved.toStringAsFixed(1)} $weightUnit';
+                        weightStr = '  •  ${weightMoved.toStringAsFixed(1)} $weightUnit${repsPerRound > 1 ? ' (x$repsPerRound reps)' : ''}';
                       } else if (!isStrength && ruckWeight > 0.0) {
                         weightStr = '  •  ${ruckWeight.toStringAsFixed(1)} $ruckWeightUnit ruck';
                       }

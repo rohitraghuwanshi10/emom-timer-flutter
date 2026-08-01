@@ -17,7 +17,7 @@ void main() {
       final dbPath = inMemoryDatabasePath;
       db = await openDatabase(
         dbPath,
-        version: 6,
+        version: 18,
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE IF NOT EXISTS profiles (
@@ -29,6 +29,7 @@ void main() {
                 birth_date TEXT,
                 weight_kg REAL,
                 weight_unit_pref TEXT,
+                distance_unit_pref TEXT DEFAULT 'km',
                 auto_connect_hr INTEGER,
                 health_enabled INTEGER DEFAULT 0,
                 save_history INTEGER DEFAULT 1
@@ -46,6 +47,15 @@ void main() {
                 notes TEXT,
                 continuous_mode INTEGER DEFAULT 0,
                 activity_type TEXT DEFAULT 'HIIT',
+                auto_regulate INTEGER DEFAULT 1,
+                treadmill_workout INTEGER DEFAULT 0,
+                work_speed REAL DEFAULT 4.0,
+                rest_speed REAL DEFAULT 0.0,
+                weight_moved REAL DEFAULT 0.0,
+                weight_unit TEXT DEFAULT 'kg',
+                ruck_weight REAL DEFAULT 0.0,
+                ruck_weight_unit TEXT DEFAULT 'lbs',
+                reps_per_round INTEGER DEFAULT 1,
                 FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE,
                 UNIQUE(profile_name, template_name)
             )
@@ -96,7 +106,7 @@ void main() {
 
     Future<void> waitForDatabase(WidgetTester tester) async {
       await tester.runAsync(() async {
-        await Future.delayed(const Duration(milliseconds: 50));
+        await Future.delayed(const Duration(milliseconds: 200));
       });
       await tester.pumpAndSettle();
     }
@@ -121,8 +131,8 @@ void main() {
       expect(find.text('Heavy Squat Strength'), findsOneWidget);
 
       // Verify stats values are shown (Morning HIIT has 10 rounds, Squat has 5)
-      expect(find.textContaining('10 Rounds'), findsOneWidget);
-      expect(find.textContaining('5 Rounds'), findsOneWidget);
+      expect(find.textContaining('10 R'), findsOneWidget);
+      expect(find.textContaining('5 R'), findsOneWidget);
     });
 
     testWidgets('LibraryScreen search filters cards correctly', (tester) async {

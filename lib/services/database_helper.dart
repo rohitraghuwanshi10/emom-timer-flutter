@@ -112,7 +112,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 13,
+        version: 18,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -248,6 +248,106 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for version 13: $e');
             }
           }
+          if (oldVersion < 14) {
+            try {
+              await db.execute('ALTER TABLE workout_templates ADD COLUMN reps_per_round INTEGER DEFAULT 1');
+              await db.execute('ALTER TABLE workouts ADD COLUMN reps_per_round INTEGER DEFAULT 1');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 14: $e');
+            }
+          }
+          if (oldVersion < 15) {
+            try {
+              await db.execute('ALTER TABLE workouts ADD COLUMN reps_completed INTEGER DEFAULT 0');
+              await db.execute('UPDATE workouts SET reps_completed = total_rounds_completed * reps_per_round WHERE reps_per_round IS NOT NULL');
+              await db.execute('UPDATE workouts SET total_weight_moved = total_rounds_completed * reps_per_round * weight_moved WHERE reps_per_round IS NOT NULL AND weight_moved > 0.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 15: $e');
+            }
+          }
+          if (oldVersion < 16) {
+            try {
+              await db.execute('''
+                UPDATE workouts 
+                SET reps_per_round = (
+                  SELECT reps_per_round 
+                  FROM workout_templates 
+                  WHERE workout_templates.template_name = workouts.workout_name 
+                    AND workout_templates.profile_name = workouts.profile_name
+                )
+                WHERE EXISTS (
+                  SELECT 1 
+                  FROM workout_templates 
+                  WHERE workout_templates.template_name = workouts.workout_name 
+                    AND workout_templates.profile_name = workouts.profile_name
+                )
+              ''');
+              await db.execute('UPDATE workouts SET reps_completed = total_rounds_completed * reps_per_round WHERE reps_per_round IS NOT NULL');
+              await db.execute('UPDATE workouts SET total_weight_moved = total_rounds_completed * reps_per_round * weight_moved WHERE reps_per_round IS NOT NULL AND weight_moved > 0.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 16: $e');
+            }
+          }
+          if (oldVersion < 17) {
+            try {
+              await db.execute('''
+                UPDATE workouts 
+                SET reps_per_round = (
+                  SELECT reps_per_round 
+                  FROM workout_templates 
+                  WHERE workout_templates.profile_name = workouts.profile_name
+                    AND (
+                      workout_templates.template_name = workouts.workout_name 
+                      OR workout_templates.template_name = REPLACE(workouts.workout_name, ' (Modified)', '')
+                    )
+                  LIMIT 1
+                )
+                WHERE EXISTS (
+                  SELECT 1 
+                  FROM workout_templates 
+                  WHERE workout_templates.profile_name = workouts.profile_name
+                    AND (
+                      workout_templates.template_name = workouts.workout_name 
+                      OR workout_templates.template_name = REPLACE(workouts.workout_name, ' (Modified)', '')
+                    )
+                )
+              ''');
+              await db.execute('UPDATE workouts SET reps_completed = total_rounds_completed * reps_per_round WHERE reps_per_round IS NOT NULL AND (reps_completed IS NULL OR reps_completed = 0 OR reps_completed = total_rounds_completed)');
+              await db.execute('UPDATE workouts SET total_weight_moved = total_rounds_completed * reps_per_round * weight_moved WHERE reps_per_round IS NOT NULL AND weight_moved > 0.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 17: $e');
+            }
+          }
+          if (oldVersion < 18) {
+            try {
+              await db.execute('''
+                UPDATE workouts 
+                SET reps_per_round = (
+                  SELECT reps_per_round 
+                  FROM workout_templates 
+                  WHERE workout_templates.profile_name = workouts.profile_name
+                    AND (
+                      workout_templates.template_name = workouts.workout_name 
+                      OR workout_templates.template_name = REPLACE(workouts.workout_name, ' (Modified)', '')
+                    )
+                  LIMIT 1
+                )
+                WHERE EXISTS (
+                  SELECT 1 
+                  FROM workout_templates 
+                  WHERE workout_templates.profile_name = workouts.profile_name
+                    AND (
+                      workout_templates.template_name = workouts.workout_name 
+                      OR workout_templates.template_name = REPLACE(workouts.workout_name, ' (Modified)', '')
+                    )
+                )
+              ''');
+              await db.execute('UPDATE workouts SET reps_completed = total_rounds_completed * reps_per_round WHERE reps_per_round IS NOT NULL AND (reps_completed IS NULL OR reps_completed = 0 OR reps_completed = total_rounds_completed)');
+              await db.execute('UPDATE workouts SET total_weight_moved = total_rounds_completed * reps_per_round * weight_moved WHERE reps_per_round IS NOT NULL AND weight_moved > 0.0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 18: $e');
+            }
+          }
         },
       ),
     );
@@ -295,6 +395,7 @@ class DatabaseHelper {
           weight_unit TEXT DEFAULT 'kg',
           ruck_weight REAL DEFAULT 0.0,
           ruck_weight_unit TEXT DEFAULT 'lbs',
+          reps_per_round INTEGER DEFAULT 1,
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE,
           UNIQUE(profile_name, template_name)
       )
@@ -327,6 +428,8 @@ class DatabaseHelper {
           total_weight_moved REAL DEFAULT 0.0,
           ruck_weight REAL DEFAULT 0.0,
           ruck_weight_unit TEXT DEFAULT 'lbs',
+          reps_per_round INTEGER DEFAULT 1,
+          reps_completed INTEGER DEFAULT 0,
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE
       )
     ''');
@@ -398,11 +501,16 @@ class DatabaseHelper {
     String weightUnit = 'kg',
     double ruckWeight = 0.0,
     String ruckWeightUnit = 'lbs',
+    int repsPerRound = 1,
+    int repsCompleted = 0,
   }) async {
     final db = await database;
     try {
       return await db.transaction((txn) async {
-        final double totalWeightMoved = totalRoundsCompleted * weightMoved;
+        final int calculatedReps = repsCompleted > 0
+            ? repsCompleted
+            : (totalRoundsCompleted * repsPerRound);
+        final double totalWeightMoved = calculatedReps * weightMoved;
         final workoutId = await txn.insert('workouts', {
           'profile_name': profileName,
           'workout_name': workoutName,
@@ -427,6 +535,8 @@ class DatabaseHelper {
           'total_weight_moved': totalWeightMoved,
           'ruck_weight': ruckWeight,
           'ruck_weight_unit': ruckWeightUnit,
+          'reps_per_round': repsPerRound,
+          'reps_completed': calculatedReps,
         });
 
         for (var log in hrLogs) {

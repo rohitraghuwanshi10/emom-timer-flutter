@@ -42,20 +42,24 @@ class SyncService extends ChangeNotifier {
     
     try {
       // 1. Silent anonymous login
-      if (_auth.currentUser == null) {
-        _syncStatus = "Signing in anonymously...";
-        notifyListeners();
-        debugPrint('SyncService: Signing in anonymously...');
-        await _auth.signInAnonymously().timeout(const Duration(seconds: 15), onTimeout: () {
-          throw Exception("Authentication timeout. Check your internet connection.");
-        });
-        debugPrint('SyncService: Logged in as User ID: ${_auth.currentUser?.uid}');
+      try {
+        if (_auth.currentUser == null) {
+          _syncStatus = "Signing in anonymously...";
+          notifyListeners();
+          debugPrint('SyncService: Signing in anonymously...');
+          await _auth.signInAnonymously().timeout(const Duration(seconds: 15), onTimeout: () {
+            throw Exception("Authentication timeout. Check your internet connection.");
+          });
+          debugPrint('SyncService: Logged in as User ID: ${_auth.currentUser?.uid}');
+        }
+      } catch (authError) {
+        debugPrint('SyncService: Firebase Auth/Keychain access failed (proceeding to sync anyway): $authError');
       }
       
       // 2. Perform the two-way sync
       _syncStatus = "Syncing database...";
       notifyListeners();
-      await _syncData().timeout(const Duration(seconds: 25), onTimeout: () {
+      await _syncData().timeout(const Duration(seconds: 180), onTimeout: () {
         throw Exception("Database sync timeout. Firestore connection took too long.");
       });
       
@@ -270,6 +274,7 @@ class SyncService extends ChangeNotifier {
         'weight_unit': local['weight_unit'] ?? 'kg',
         'ruck_weight': local['ruck_weight'] ?? 0.0,
         'ruck_weight_unit': local['ruck_weight_unit'] ?? 'lbs',
+        'reps_per_round': local['reps_per_round'] ?? 1,
       }, SetOptions(merge: true));
     }
 
@@ -299,6 +304,7 @@ class SyncService extends ChangeNotifier {
           'weight_unit': data['weight_unit'] ?? 'kg',
           'ruck_weight': data['ruck_weight'] ?? 0.0,
           'ruck_weight_unit': data['ruck_weight_unit'] ?? 'lbs',
+          'reps_per_round': data['reps_per_round'] ?? 1,
         });
         debugPrint('SyncService: Downloaded template $tName for profile $pName');
       } else {
@@ -338,6 +344,9 @@ class SyncService extends ChangeNotifier {
         }
         if (data.containsKey('ruck_weight_unit')) {
           updateMap['ruck_weight_unit'] = data['ruck_weight_unit'] ?? 'lbs';
+        }
+        if (data.containsKey('reps_per_round')) {
+          updateMap['reps_per_round'] = data['reps_per_round'] ?? 1;
         }
         await db.update('workout_templates', updateMap,
             where: 'profile_name = ? AND template_name = ?',
@@ -404,6 +413,8 @@ class SyncService extends ChangeNotifier {
           'total_weight_moved': w['total_weight_moved'] ?? 0.0,
           'ruck_weight': w['ruck_weight'] ?? 0.0,
           'ruck_weight_unit': w['ruck_weight_unit'] ?? 'lbs',
+          'reps_per_round': w['reps_per_round'] ?? 1,
+          'reps_completed': w['reps_completed'] ?? 0,
           'hr_details': hrDataList,
         });
         
@@ -419,18 +430,34 @@ class SyncService extends ChangeNotifier {
         if (remoteData != null) {
           final remoteNotes = remoteData['notes'] as String? ?? '';
           final localNotes = w['notes'] as String? ?? '';
+          final remoteReps = remoteData['reps_completed'] as int? ?? 0;
+          final localReps = w['reps_completed'] as int? ?? 0;
+          final remoteTonnage = (remoteData['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
+          final localTonnage = (w['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
+
+          final updateFields = <String, dynamic>{};
           if (localNotes != remoteNotes && localNotes.isNotEmpty) {
-            debugPrint('SyncService: Updating remote workout notes for: $docId...');
-            await _firestore.collection('workouts').doc(docId).update({
-              'notes': localNotes,
-            });
+            updateFields['notes'] = localNotes;
             remoteData['notes'] = localNotes;
+          }
+          if (localReps != remoteReps && localReps > 0) {
+            updateFields['reps_completed'] = localReps;
+            remoteData['reps_completed'] = localReps;
+          }
+          if (localTonnage != remoteTonnage && localTonnage > 0.0) {
+            updateFields['total_weight_moved'] = localTonnage;
+            remoteData['total_weight_moved'] = localTonnage;
+          }
+
+          if (updateFields.isNotEmpty) {
+            debugPrint('SyncService: Updating remote workout fields for: $docId: $updateFields...');
+            await _firestore.collection('workouts').doc(docId).update(updateFields);
           }
         }
       }
     }
 
-    // Download remote workouts that are missing locally or have updated notes
+    // Download remote workouts that are missing locally or have updated fields
     for (var doc in remoteWorkoutsSnap.docs) {
       final docId = doc.id;
       final data = doc.data();
@@ -472,6 +499,8 @@ class SyncService extends ChangeNotifier {
             'total_weight_moved': data['total_weight_moved'] ?? 0.0,
             'ruck_weight': data['ruck_weight'] ?? 0.0,
             'ruck_weight_unit': data['ruck_weight_unit'] ?? 'lbs',
+            'reps_per_round': data['reps_per_round'] ?? 1,
+            'reps_completed': data['reps_completed'] ?? 0,
           });
           
           final List<dynamic> hrDetails = data['hr_details'] ?? [];
@@ -485,13 +514,14 @@ class SyncService extends ChangeNotifier {
           }
         });
       } else {
+        final remoteData = remoteWorkoutsMap[docId] ?? data;
         final localNotes = localW['notes'] as String? ?? '';
-        final remoteNotes = data['notes'] as String? ?? '';
+        final remoteNotes = remoteData['notes'] as String? ?? '';
         
         final localWeight = (localW['weight_moved'] as num?)?.toDouble() ?? 0.0;
-        final remoteWeight = (data['weight_moved'] as num?)?.toDouble() ?? 0.0;
+        final remoteWeight = (remoteData['weight_moved'] as num?)?.toDouble() ?? 0.0;
         final localRuck = (localW['ruck_weight'] as num?)?.toDouble() ?? 0.0;
-        final remoteRuck = (data['ruck_weight'] as num?)?.toDouble() ?? 0.0;
+        final remoteRuck = (remoteData['ruck_weight'] as num?)?.toDouble() ?? 0.0;
 
         final updateMap = <String, dynamic>{};
         
@@ -501,13 +531,31 @@ class SyncService extends ChangeNotifier {
         
         if (localWeight == 0.0 && remoteWeight > 0.0) {
           updateMap['weight_moved'] = remoteWeight;
-          updateMap['weight_unit'] = data['weight_unit'] ?? 'kg';
-          updateMap['total_weight_moved'] = (data['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
+          updateMap['weight_unit'] = remoteData['weight_unit'] ?? 'kg';
+          updateMap['total_weight_moved'] = (remoteData['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
         }
         
         if (localRuck == 0.0 && remoteRuck > 0.0) {
           updateMap['ruck_weight'] = remoteRuck;
-          updateMap['ruck_weight_unit'] = data['ruck_weight_unit'] ?? 'lbs';
+          updateMap['ruck_weight_unit'] = remoteData['ruck_weight_unit'] ?? 'lbs';
+        }
+
+        final localReps = localW['reps_per_round'] as int? ?? 1;
+        final remoteReps = remoteData['reps_per_round'] as int? ?? 1;
+        if (localReps == 1 && remoteReps > 1) {
+          updateMap['reps_per_round'] = remoteReps;
+        }
+
+        final localRepsCompleted = localW['reps_completed'] as int? ?? 0;
+        final remoteRepsCompleted = remoteData['reps_completed'] as int? ?? 0;
+        final localTonnage = (localW['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
+        final remoteTonnage = (remoteData['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
+
+        if (localRepsCompleted == 0 && remoteRepsCompleted > 0) {
+          updateMap['reps_completed'] = remoteRepsCompleted;
+        }
+        if (localTonnage == 0.0 && remoteTonnage > 0.0) {
+          updateMap['total_weight_moved'] = remoteTonnage;
         }
         
         if (updateMap.isNotEmpty) {
