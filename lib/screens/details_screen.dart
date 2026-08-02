@@ -287,6 +287,8 @@ class _DetailsScreenState extends State<DetailsScreen> {
           DataColumn(label: Text('Rest Time')),
           DataColumn(label: Text('Peak HR')),
           DataColumn(label: Text('Avg HR')),
+          DataColumn(label: Text('HRR 1m')),
+          DataColumn(label: Text('HRR 2m')),
           DataColumn(label: Text('Cals (kcal)')),
           DataColumn(label: Text('Weight / Load')),
           DataColumn(label: Text('Run Dist')),
@@ -334,6 +336,23 @@ class _DetailsScreenState extends State<DetailsScreen> {
             }
 
             final repsCompleted = w['reps_completed'] as int? ?? 0;
+            final hrr1m = w['hrr_1min'] as int?;
+            final hrr2m = w['hrr_2min'] as int?;
+            final recDur = w['recovery_duration_sec'] as int?;
+
+            String hrr1Display = '--';
+            if (hrr1m != null) {
+              hrr1Display = '-$hrr1m bpm';
+            } else if (recDur != null && recDur < 60) {
+              hrr1Display = 'N/A (${recDur}s)';
+            }
+
+            String hrr2Display = '--';
+            if (hrr2m != null) {
+              hrr2Display = '-$hrr2m bpm';
+            } else if (recDur != null) {
+              hrr2Display = 'N/A (${recDur}s)';
+            }
 
             return DataRow(cells: [
               DataCell(Text(name, style: TextStyle(color: wColor, fontWeight: FontWeight.bold))),
@@ -360,6 +379,8 @@ class _DetailsScreenState extends State<DetailsScreen> {
             DataCell(Text(_fmtSec(w['rest_time_sec']), style: const TextStyle(color: Color(0xFFFF7A00)))), // Vibrant Orange
             DataCell(Text(_fmtHr(w['max_hr']), style: const TextStyle(color: Color(0xFFFF3B30)))), // Neon Red
             DataCell(Text(_fmtHr(w['avg_hr']), style: const TextStyle(color: Color(0xFF38B6FF)))), // Cyan/Blue
+            DataCell(Text(hrr1Display, style: TextStyle(color: hrr1m != null ? const Color(0xFF00E5FF) : Colors.grey, fontWeight: FontWeight.bold))),
+            DataCell(Text(hrr2Display, style: TextStyle(color: hrr2m != null ? const Color(0xFF00E5FF) : Colors.grey, fontWeight: FontWeight.bold))),
             DataCell(Text((w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--', style: const TextStyle(color: Color(0xFFBF5AF2)))), // Neon Purple
             DataCell(Text(weightLoadDisplay, style: const TextStyle(color: Colors.amber))),
             DataCell(Text(runDistance > 0 ? "${displayDist.toStringAsFixed(2)} $distUnit" : '--', style: const TextStyle(color: Color(0xFF00E5FF)))),
@@ -413,7 +434,8 @@ class _DetailsScreenState extends State<DetailsScreen> {
       if (logs.isEmpty) continue;
 
       Color wColor = _nordColors[i % _nordColors.length];
-      List<FlSpot> spots = [];
+      List<FlSpot> workoutSpots = [];
+      List<FlSpot> recoverySpots = [];
       DateTime? startTs;
 
       for (var log in logs) {
@@ -424,31 +446,60 @@ class _DetailsScreenState extends State<DetailsScreen> {
           final double bpm = (log['bpm'] as num).toDouble();
           
           if (bpm > maxY) maxY = bpm;
-          spots.add(FlSpot(offsetMin + deltaMin, bpm));
+          final spot = FlSpot(offsetMin + deltaMin, bpm);
+          final bool isRec = (log['is_recovery'] as int? ?? 0) == 1;
+
+          if (isRec) {
+            if (recoverySpots.isEmpty && workoutSpots.isNotEmpty) {
+              recoverySpots.add(workoutSpots.last);
+            }
+            recoverySpots.add(spot);
+          } else {
+            workoutSpots.add(spot);
+          }
         } catch (_) {}
       }
 
-      if (spots.isNotEmpty) {
-        debugPrint('DetailsScreen: Created ${spots.length} FlSpots for workout ID ${w['id']}. First spot: ${spots.first.x}, ${spots.first.y}. Last spot: ${spots.last.x}, ${spots.last.y}');
+      final lastSpotX = workoutSpots.isNotEmpty
+          ? workoutSpots.last.x
+          : (recoverySpots.isNotEmpty ? recoverySpots.last.x : 0.0);
+
+      if (workoutSpots.isNotEmpty) {
         lineBarsData.add(
           LineChartBarData(
-            spots: spots,
+            spots: workoutSpots,
             isCurved: false,
             color: wColor,
-            barWidth: 1.5,
+            barWidth: 2.0,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
               color: wColor.withValues(alpha: 0.1),
             ),
-          )
+          ),
         );
-        offsetMin = spots.last.x + gapMin;
-        if (offsetMin > maxX) maxX = offsetMin;
-      } else {
-        debugPrint('DetailsScreen: No spots created for workout ID ${w['id']}');
       }
+
+      if (recoverySpots.isNotEmpty) {
+        lineBarsData.add(
+          LineChartBarData(
+            spots: recoverySpots,
+            isCurved: false,
+            color: const Color(0xFF00E5FF),
+            barWidth: 2.0,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: true),
+            belowBarData: BarAreaData(
+              show: true,
+              color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
+            ),
+          ),
+        );
+      }
+
+      offsetMin = (recoverySpots.isNotEmpty ? recoverySpots.last.x : lastSpotX) + gapMin;
+      if (offsetMin > maxX) maxX = offsetMin;
     }
 
     maxY = (maxY + 15).clamp(140.0, 220.0);

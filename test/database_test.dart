@@ -859,6 +859,9 @@ void main() {
                 ruck_weight_unit TEXT DEFAULT 'lbs',
                 reps_per_round INTEGER DEFAULT 1,
                 reps_completed INTEGER DEFAULT 0,
+                hrr_1min INTEGER,
+                hrr_2min INTEGER,
+                recovery_duration_sec INTEGER,
                 FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE
             )
           ''');
@@ -869,6 +872,7 @@ void main() {
                 capture_time TEXT,
                 bpm INTEGER,
                 zone TEXT,
+                is_recovery INTEGER DEFAULT 0,
                 FOREIGN KEY(workout_id) REFERENCES workouts(id) ON DELETE CASCADE
             )
           ''');
@@ -1089,6 +1093,46 @@ void main() {
       expect(workouts.first['total_weight_moved'], equals(3888.0));
 
       await dbV16.close();
+    });
+
+    test('Heart Rate Recovery (HRR) save and updateWorkoutHRR with 90s early finish', () async {
+      final db = await DatabaseHelper.instance.database;
+
+      final workoutId = await DatabaseHelper.instance.saveWorkout(
+        profileName: 'Default',
+        workoutName: 'HRR Test Workout',
+        startTime: DateTime.now().toIso8601String(),
+        endTime: DateTime.now().add(const Duration(minutes: 10)).toIso8601String(),
+        totalRoundsCompleted: 10,
+        workDuration: 40,
+        restDuration: 20,
+        totalTimeSec: 600,
+        workTimeSec: 400,
+        restTimeSec: 200,
+        maxHr: 180,
+        avgHr: 150,
+        caloriesBurntKcal: 120.0,
+        notes: 'Testing HRR tracking',
+        hrLogs: [
+          {'capture_time': DateTime.now().toIso8601String(), 'bpm': 180, 'zone': 'ZONE 5', 'is_recovery': 0},
+        ],
+      );
+
+      expect(workoutId, isNotNull);
+
+      // Simulate early recovery end at 90s (drop1 = 180 - 150 = 30 bpm, drop2 = NULL)
+      await DatabaseHelper.instance.updateWorkoutHRR(
+        workoutId: workoutId!,
+        hrr1min: 30,
+        hrr2min: null,
+        recoveryDurationSec: 90,
+      );
+
+      final result = await db.query('workouts', where: 'id = ?', whereArgs: [workoutId]);
+      expect(result.length, equals(1));
+      expect(result.first['hrr_1min'], equals(30));
+      expect(result.first['hrr_2min'], isNull);
+      expect(result.first['recovery_duration_sec'], equals(90));
     });
   });
 }

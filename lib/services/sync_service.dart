@@ -387,6 +387,7 @@ class SyncService extends ChangeNotifier {
           'capture_time': log['capture_time'],
           'bpm': log['bpm'],
           'zone': log['zone'],
+          'is_recovery': log['is_recovery'] ?? 0,
         }).toList();
 
         await _firestore.collection('workouts').doc(docId).set({
@@ -415,6 +416,9 @@ class SyncService extends ChangeNotifier {
           'ruck_weight_unit': w['ruck_weight_unit'] ?? 'lbs',
           'reps_per_round': w['reps_per_round'] ?? 1,
           'reps_completed': w['reps_completed'] ?? 0,
+          'hrr_1min': w['hrr_1min'],
+          'hrr_2min': w['hrr_2min'],
+          'recovery_duration_sec': w['recovery_duration_sec'],
           'hr_details': hrDataList,
         });
         
@@ -501,6 +505,9 @@ class SyncService extends ChangeNotifier {
             'ruck_weight_unit': data['ruck_weight_unit'] ?? 'lbs',
             'reps_per_round': data['reps_per_round'] ?? 1,
             'reps_completed': data['reps_completed'] ?? 0,
+            'hrr_1min': data['hrr_1min'],
+            'hrr_2min': data['hrr_2min'],
+            'recovery_duration_sec': data['recovery_duration_sec'],
           });
           
           final List<dynamic> hrDetails = data['hr_details'] ?? [];
@@ -510,6 +517,7 @@ class SyncService extends ChangeNotifier {
               'capture_time': log['capture_time'],
               'bpm': log['bpm'],
               'zone': log['zone'],
+              'is_recovery': log['is_recovery'] ?? 0,
             });
           }
         });

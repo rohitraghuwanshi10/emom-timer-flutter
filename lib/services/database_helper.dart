@@ -112,7 +112,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 18,
+        version: 19,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -348,6 +348,16 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for version 18: $e');
             }
           }
+          if (oldVersion < 19) {
+            try {
+              await db.execute('ALTER TABLE workouts ADD COLUMN hrr_1min INTEGER');
+              await db.execute('ALTER TABLE workouts ADD COLUMN hrr_2min INTEGER');
+              await db.execute('ALTER TABLE workouts ADD COLUMN recovery_duration_sec INTEGER');
+              await db.execute('ALTER TABLE heart_rate_logs ADD COLUMN is_recovery INTEGER DEFAULT 0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 19: $e');
+            }
+          }
         },
       ),
     );
@@ -430,6 +440,9 @@ class DatabaseHelper {
           ruck_weight_unit TEXT DEFAULT 'lbs',
           reps_per_round INTEGER DEFAULT 1,
           reps_completed INTEGER DEFAULT 0,
+          hrr_1min INTEGER,
+          hrr_2min INTEGER,
+          recovery_duration_sec INTEGER,
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE
       )
     ''');
@@ -444,6 +457,7 @@ class DatabaseHelper {
           capture_time TEXT,
           bpm INTEGER,
           zone TEXT,
+          is_recovery INTEGER DEFAULT 0,
           FOREIGN KEY(workout_id) REFERENCES workouts(id) ON DELETE CASCADE
       )
     ''');
@@ -503,6 +517,9 @@ class DatabaseHelper {
     String ruckWeightUnit = 'lbs',
     int repsPerRound = 1,
     int repsCompleted = 0,
+    int? hrr1min,
+    int? hrr2min,
+    int? recoveryDurationSec,
   }) async {
     final db = await database;
     try {
@@ -537,6 +554,9 @@ class DatabaseHelper {
           'ruck_weight_unit': ruckWeightUnit,
           'reps_per_round': repsPerRound,
           'reps_completed': calculatedReps,
+          'hrr_1min': hrr1min,
+          'hrr_2min': hrr2min,
+          'recovery_duration_sec': recoveryDurationSec,
         });
 
         for (var log in hrLogs) {
@@ -545,6 +565,7 @@ class DatabaseHelper {
             'capture_time': log['capture_time'],
             'bpm': log['bpm'],
             'zone': log['zone'],
+            'is_recovery': log['is_recovery'] ?? 0,
           });
         }
 
@@ -554,6 +575,51 @@ class DatabaseHelper {
     } catch (e) {
       debugPrint('DatabaseHelper: Error saving workout: $e');
       return null;
+    }
+  }
+
+  Future<void> updateWorkoutHRR({
+    required int workoutId,
+    int? hrr1min,
+    int? hrr2min,
+    required int recoveryDurationSec,
+  }) async {
+    try {
+      final db = await database;
+      await db.update(
+        'workouts',
+        {
+          'hrr_1min': hrr1min,
+          'hrr_2min': hrr2min,
+          'recovery_duration_sec': recoveryDurationSec,
+        },
+        where: 'id = ?',
+        whereArgs: [workoutId],
+      );
+      debugPrint('DatabaseHelper: Updated workout $workoutId HRR: 1m=$hrr1min, 2m=$hrr2min, dur=${recoveryDurationSec}s');
+    } catch (e) {
+      debugPrint('DatabaseHelper: Error updating workout HRR: $e');
+    }
+  }
+
+  Future<void> insertHeartRateLog({
+    required int workoutId,
+    required String captureTime,
+    required int bpm,
+    required String zone,
+    int isRecovery = 0,
+  }) async {
+    try {
+      final db = await database;
+      await db.insert('heart_rate_logs', {
+        'workout_id': workoutId,
+        'capture_time': captureTime,
+        'bpm': bpm,
+        'zone': zone,
+        'is_recovery': isRecovery,
+      });
+    } catch (e) {
+      debugPrint('DatabaseHelper: Error inserting HR log: $e');
     }
   }
 }
