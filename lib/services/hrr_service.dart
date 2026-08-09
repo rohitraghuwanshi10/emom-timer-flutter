@@ -67,15 +67,6 @@ class HrrService {
     
     if (state.isTracking && state.workoutId != null) {
       stateNotifier.value = state.copyWith(currentHr: hr);
-
-      final zoneStr = _calculateZone(hr);
-      DatabaseHelper.instance.insertHeartRateLog(
-        workoutId: state.workoutId!,
-        captureTime: DateTime.now().toIso8601String().substring(0, 19),
-        bpm: hr,
-        zone: zoneStr,
-        isRecovery: 1,
-      );
     }
   }
 
@@ -104,13 +95,25 @@ class HrrService {
 
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!state.isTracking) {
+      if (!state.isTracking || state.workoutId == null) {
         timer.cancel();
         return;
       }
 
       final newRemaining = state.secondsRemaining > 0 ? state.secondsRemaining - 1 : 0;
       final elapsed = 120 - newRemaining;
+
+      // Record a 1-second HR log tick for smooth recovery curve matching active workout density
+      if (_lastHrSample > 0) {
+        final zoneStr = _calculateZone(_lastHrSample);
+        DatabaseHelper.instance.insertHeartRateLog(
+          workoutId: state.workoutId!,
+          captureTime: DateTime.now().toIso8601String().substring(0, 19),
+          bpm: _lastHrSample,
+          zone: zoneStr,
+          isRecovery: 1,
+        );
+      }
 
       int? updatedHr1m = state.hr1min;
       if (elapsed == 60 && _lastHrSample > 0 && updatedHr1m == null) {
