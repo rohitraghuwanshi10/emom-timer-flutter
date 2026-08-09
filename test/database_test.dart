@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 import 'package:emom_timer_flutter/services/database_helper.dart';
+import 'package:emom_timer_flutter/services/hrr_service.dart';
 
 void main() {
   // Initialize FFI for tests
@@ -1132,6 +1133,48 @@ void main() {
       expect(result.length, equals(1));
       expect(result.first['hrr_1min'], equals(30));
       expect(result.first['hrr_2min'], isNull);
+      expect(result.first['recovery_duration_sec'], equals(90));
+    });
+
+    test('HrrService manages background recovery tracking independently of UI screens', () async {
+      final db = await DatabaseHelper.instance.database;
+
+      final workoutId = await DatabaseHelper.instance.saveWorkout(
+        profileName: 'Default',
+        workoutName: 'HrrService Background Test',
+        startTime: DateTime.now().toIso8601String(),
+        endTime: DateTime.now().add(const Duration(minutes: 5)).toIso8601String(),
+        totalRoundsCompleted: 5,
+        workDuration: 40,
+        restDuration: 20,
+        totalTimeSec: 300,
+        workTimeSec: 200,
+        restTimeSec: 100,
+        maxHr: 175,
+        avgHr: 145,
+        caloriesBurntKcal: 80.0,
+        notes: 'Testing HrrService background execution',
+        hrLogs: [],
+      );
+
+      expect(workoutId, isNotNull);
+
+      // Start recovery via HrrService singleton
+      HrrService.instance.startRecovery(workoutId: workoutId!, peakHr: 175);
+
+      expect(HrrService.instance.state.isTracking, isTrue);
+      expect(HrrService.instance.state.workoutId, equals(workoutId));
+      expect(HrrService.instance.state.peakHr, equals(175));
+      expect(HrrService.instance.state.secondsRemaining, equals(120));
+
+      // Simulate 90 seconds elapsed in background (30s remaining)
+      HrrService.instance.stateNotifier.value = HrrService.instance.state.copyWith(secondsRemaining: 30);
+      await HrrService.instance.finalizeRecovery();
+
+      expect(HrrService.instance.state.isTracking, isFalse);
+
+      final result = await db.query('workouts', where: 'id = ?', whereArgs: [workoutId]);
+      expect(result.length, equals(1));
       expect(result.first['recovery_duration_sec'], equals(90));
     });
   });

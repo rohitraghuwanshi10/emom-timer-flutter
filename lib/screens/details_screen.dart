@@ -103,7 +103,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       final bool isMetric = _distanceUnitPref == 'km';
       final String distUnit = isMetric ? 'km' : 'mi';
       final String speedUnit = isMetric ? 'km/h' : 'mph';
-      csvBuffer.writeln('Workout,Start Time,Rounds,Reps Completed,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),Calories (kcal),Run Dist ($distUnit),Run Peak Speed ($speedUnit),Run Avg Speed ($speedUnit),Weight Moved,Weight Unit,Total Weight Moved,Ruck Weight,Ruck Weight Unit,Notes');
+            csvBuffer.writeln('Workout,Start Time,Rounds,Reps Completed,Total Time,Work Time,Rest Time,Peak HR (BPM),Avg HR (BPM),1min HR Recovery (BPM),2min HR Recovery (BPM),Recovery Duration (s),Calories (kcal),Run Dist ($distUnit),Run Peak Speed ($speedUnit),Run Avg Speed ($speedUnit),Weight Moved,Weight Unit,Total Weight Moved,Ruck Weight,Ruck Weight Unit,Notes');
 
       for (int i = 0; i < _workouts.length; i++) {
         final w = _workouts[i];
@@ -122,6 +122,9 @@ class _DetailsScreenState extends State<DetailsScreen> {
         final String restTime = _fmtSec(w['rest_time_sec']);
         final String peakHr = _fmtHr(w['max_hr']);
         final String avgHr = _fmtHr(w['avg_hr']);
+        final String hrr1min = w['hrr_1min'] != null ? '${w['hrr_1min']}' : '--';
+        final String hrr2min = w['hrr_2min'] != null ? '${w['hrr_2min']}' : '--';
+        final String hrrDuration = w['recovery_duration_sec'] != null ? '${w['recovery_duration_sec']}' : '--';
         final String calories = (w['calories_burnt_kcal'] as num?)?.toStringAsFixed(1) ?? '--';
 
         final double rawDist = (w['run_distance'] as num?)?.toDouble() ?? 0.0;
@@ -156,7 +159,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
         if (escapedName.contains(',') || escapedName.contains('"') || escapedName.contains('\n') || escapedName.contains('\r')) {
           escapedName = '"${escapedName.replaceAll('"', '""')}"';
         }
-        csvBuffer.writeln('$escapedName,$startStr,$rounds,$repsCompleted,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$calories,$runDist,$runPeak,$runAvg,$weightMoved,$weightUnit,$totalWeightMoved,$ruckWeight,$ruckWeightUnit,$notes');
+        csvBuffer.writeln('$escapedName,$startStr,$rounds,$repsCompleted,$totalTime,$workTime,$restTime,$peakHr,$avgHr,$hrr1min,$hrr2min,$hrrDuration,$calories,$runDist,$runPeak,$runAvg,$weightMoved,$weightUnit,$totalWeightMoved,$ruckWeight,$ruckWeightUnit,$notes');
       }
 
       // Write to file

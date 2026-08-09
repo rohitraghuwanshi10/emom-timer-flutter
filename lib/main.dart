@@ -10,11 +10,13 @@ import 'services/sync_service.dart';
 import 'services/database_helper.dart';
 import 'services/bluetooth_service.dart';
 import 'services/treadmill_service.dart';
+import 'services/hrr_service.dart';
 import 'firebase_options.dart';
 import 'dart:async';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  HrrService.instance.init();
   
   // Silence verbose Bluetooth logs (e.g. FBP-iOS didUpdateValueForCharacteristic)
   FlutterBluePlus.setLogLevel(LogLevel.none, color: false);

@@ -9,6 +9,7 @@ import '../services/sync_service.dart';
 import '../services/health_service.dart';
 import '../services/watch_connectivity_service.dart';
 import '../services/treadmill_service.dart';
+import '../services/hrr_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -120,13 +121,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   double _treadmillPeakSpeed = 0.0;
   List<double> _treadmillSpeeds = [];
 
-  bool _isRecoveryTracking = false;
-  int _recoverySecondsRemaining = 120;
-  Timer? _recoveryTimer;
-  int? _recoveryWorkoutId;
-  int _recoveryPeakHr = 0;
-  int? _recoveryHr1min;
-
   @override
   void initState() {
     super.initState();
@@ -137,163 +131,63 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     _setupTreadmill();
   }
 
-  void _startRecoveryTracking(int workoutId, int peakHr) {
-    _stopRecoveryTracking(finalize: false);
-    if (!mounted) return;
-    setState(() {
-      _isRecoveryTracking = true;
-      _recoverySecondsRemaining = 120;
-      _recoveryWorkoutId = workoutId;
-      _recoveryPeakHr = peakHr > 0 ? peakHr : _currentHr;
-      _recoveryHr1min = null;
-    });
-
-    debugPrint('TimerScreen: Started post-workout HR recovery tracking for workout $workoutId (Peak HR: $_recoveryPeakHr)');
-
-    _recoveryTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        if (_recoverySecondsRemaining > 0) {
-          _recoverySecondsRemaining--;
-        }
-        final elapsed = 120 - _recoverySecondsRemaining;
-
-        if (elapsed == 60 && _currentHr > 0 && _recoveryHr1min == null) {
-          _recoveryHr1min = _currentHr;
-          final drop1 = _recoveryPeakHr - _recoveryHr1min!;
-          DatabaseHelper.instance.updateWorkoutHRR(
-            workoutId: _recoveryWorkoutId!,
-            hrr1min: drop1 > 0 ? drop1 : 0,
-            recoveryDurationSec: 60,
-          );
-        }
-
-        if (_recoverySecondsRemaining <= 0) {
-          _finalizeRecoveryTracking();
-        }
-      });
-    });
-  }
-
-  void _finalizeRecoveryTracking() {
-    if (!_isRecoveryTracking || _recoveryWorkoutId == null) return;
-
-    final elapsed = 120 - _recoverySecondsRemaining;
-    int? drop1;
-    int? drop2;
-
-    if (elapsed >= 60) {
-      final hr1m = _recoveryHr1min ?? (_currentHr > 0 ? _currentHr : null);
-      if (hr1m != null) {
-        drop1 = _recoveryPeakHr - hr1m;
-        if (drop1 < 0) drop1 = 0;
-      }
-    }
-
-    if (elapsed >= 120 && _currentHr > 0) {
-      drop2 = _recoveryPeakHr - _currentHr;
-      if (drop2 < 0) drop2 = 0;
-    }
-
-    DatabaseHelper.instance.updateWorkoutHRR(
-      workoutId: _recoveryWorkoutId!,
-      hrr1min: drop1,
-      hrr2min: drop2,
-      recoveryDurationSec: elapsed,
-    );
-
-    SyncService.instance.signInAndSync();
-    _stopRecoveryTracking(finalize: false);
-  }
-
-  void _stopRecoveryTracking({bool finalize = true}) {
-    if (finalize && _isRecoveryTracking) {
-      _finalizeRecoveryTracking();
-      return;
-    }
-    _recoveryTimer?.cancel();
-    _recoveryTimer = null;
-    if (mounted) {
-      setState(() {
-        _isRecoveryTracking = false;
-        _recoverySecondsRemaining = 120;
-        _recoveryWorkoutId = null;
-        _recoveryPeakHr = 0;
-        _recoveryHr1min = null;
-      });
-    } else {
-      _isRecoveryTracking = false;
-    }
-  }
-
-  void _onHeartRateSampleReceived(int hr) {
-    if (_isRecoveryTracking && _recoveryWorkoutId != null && hr > 0) {
-      final zoneStr = _calculateZone(hr);
-      DatabaseHelper.instance.insertHeartRateLog(
-        workoutId: _recoveryWorkoutId!,
-        captureTime: DateTime.now().toIso8601String().substring(0, 19),
-        bpm: hr,
-        zone: zoneStr,
-        isRecovery: 1,
-      );
-    }
-  }
-
   Widget _buildRecoveryTrackingBanner() {
-    if (!_isRecoveryTracking) return const SizedBox.shrink();
+    return ValueListenableBuilder<HrrState>(
+      valueListenable: HrrService.instance.stateNotifier,
+      builder: (context, hrrState, _) {
+        if (!hrrState.isTracking) return const SizedBox.shrink();
 
-    final mins = _recoverySecondsRemaining ~/ 60;
-    final secs = _recoverySecondsRemaining % 60;
-    final timeStr = '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+        final mins = hrrState.secondsRemaining ~/ 60;
+        final secs = hrrState.secondsRemaining % 60;
+        final timeStr = '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF00E5FF).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF00E5FF).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Icon(Icons.favorite, color: Color(0xFF00E5FF), size: 18),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  const Text(
-                    'HR RECOVERY TRACKING',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF00E5FF),
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  Text(
-                    'Measuring post-workout recovery ($timeStr left)',
-                    style: const TextStyle(fontSize: 12, color: Colors.white70),
+                  const Icon(Icons.favorite, color: Color(0xFF00E5FF), size: 18),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'HR RECOVERY TRACKING',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF00E5FF),
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      Text(
+                        'Measuring post-workout recovery ($timeStr left)',
+                        style: const TextStyle(fontSize: 12, color: Colors.white70),
+                      ),
+                    ],
                   ),
                 ],
               ),
+              TextButton(
+                onPressed: () => HrrService.instance.finalizeRecovery(),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF00E5FF),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                ),
+                child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
             ],
           ),
-          TextButton(
-            onPressed: () => _finalizeRecoveryTracking(),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF00E5FF),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            ),
-            child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -402,7 +296,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         setState(() => _currentHr = hr);
       }
       _engine?.updateHeartRate(hr);
-      _onHeartRateSampleReceived(hr);
     });
 
     WatchConnectivityService.instance.startListening();
@@ -411,7 +304,6 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         setState(() => _currentHr = hr);
       }
       _engine?.updateHeartRate(hr);
-      _onHeartRateSampleReceived(hr);
     });
   }
 
@@ -457,8 +349,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   }
 
   void _startWorkout() {
-    if (_isRecoveryTracking) {
-      _stopRecoveryTracking(finalize: true);
+    if (HrrService.instance.state.isTracking) {
+      HrrService.instance.stopRecovery(finalize: true);
     }
     if (_engine != null && _currentEvent.state != WorkoutState.IDLE && _currentEvent.state != WorkoutState.FINISHED) return;
 
@@ -854,7 +746,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       );
 
       if (workoutId != null && (maxHr > 0 || _currentHr > 0)) {
-        _startRecoveryTracking(workoutId, maxHr);
+        HrrService.instance.startRecovery(workoutId: workoutId, peakHr: maxHr);
       }
       
       debugPrint("TimerScreen: _healthEnabled is $_healthEnabled");
