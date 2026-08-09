@@ -426,10 +426,22 @@ class _DetailsScreenState extends State<DetailsScreen> {
     }
 
     List<LineChartBarData> lineBarsData = [];
-    double offsetMin = 0.0;
-    double gapMin = 1.0;
     double maxY = 40.0;
     double maxX = 0.0;
+
+    // Find earliest log timestamp of the day as the session t=0 anchor
+    DateTime? firstLogTs;
+    for (var w in _workouts) {
+      var logs = _hrLogs[w['id']] ?? [];
+      for (var log in logs) {
+        try {
+          final dt = DateTime.parse(log['capture_time'] as String);
+          if (firstLogTs == null || dt.isBefore(firstLogTs)) {
+            firstLogTs = dt;
+          }
+        } catch (_) {}
+      }
+    }
 
     for (int i = 0; i < _workouts.length; i++) {
       var w = _workouts[i];
@@ -439,17 +451,19 @@ class _DetailsScreenState extends State<DetailsScreen> {
       Color wColor = _nordColors[i % _nordColors.length];
       List<FlSpot> workoutSpots = [];
       List<FlSpot> recoverySpots = [];
-      DateTime? startTs;
 
       for (var log in logs) {
         try {
           final dt = DateTime.parse(log['capture_time'] as String);
-          startTs ??= dt;
-          final double deltaMin = dt.difference(startTs).inSeconds / 60.0;
+          final double deltaMin = firstLogTs != null
+              ? (dt.difference(firstLogTs).inSeconds / 60.0)
+              : 0.0;
           final double bpm = (log['bpm'] as num).toDouble();
           
           if (bpm > maxY) maxY = bpm;
-          final spot = FlSpot(offsetMin + deltaMin, bpm);
+          if (deltaMin > maxX) maxX = deltaMin;
+
+          final spot = FlSpot(deltaMin, bpm);
           final bool isRec = (log['is_recovery'] as int? ?? 0) == 1;
 
           if (isRec) {
@@ -462,10 +476,6 @@ class _DetailsScreenState extends State<DetailsScreen> {
           }
         } catch (_) {}
       }
-
-      final lastSpotX = workoutSpots.isNotEmpty
-          ? workoutSpots.last.x
-          : (recoverySpots.isNotEmpty ? recoverySpots.last.x : 0.0);
 
       if (workoutSpots.isNotEmpty) {
         lineBarsData.add(
@@ -500,9 +510,6 @@ class _DetailsScreenState extends State<DetailsScreen> {
           ),
         );
       }
-
-      offsetMin = (recoverySpots.isNotEmpty ? recoverySpots.last.x : lastSpotX) + gapMin;
-      if (offsetMin > maxX) maxX = offsetMin;
     }
 
     maxY = (maxY + 15).clamp(140.0, 220.0);
