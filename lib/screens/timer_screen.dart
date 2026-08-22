@@ -427,7 +427,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       } else if (event.timeRemaining == 10 && event.state == WorkoutState.PREP) {
         AudioService.instance.playWorkChime(); // Play 'Work' sound for PREP
       } else if ((event.state == WorkoutState.PREP || event.state == WorkoutState.REST) &&
-          (event.timeRemaining == 3 || event.timeRemaining == 2 || event.timeRemaining == 1)) {
+          (event.timeRemaining >= 1 && event.timeRemaining <= 5)) {
         AudioService.instance.playTick();
       }
 
