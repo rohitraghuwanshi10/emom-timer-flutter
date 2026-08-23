@@ -149,8 +149,6 @@ class TreadmillBluetoothService {
     await disconnect();
 
     _connectedDevice = device;
-    _connectionState = BluetoothConnectionState.connecting;
-    _connectionStateController.add(_connectionState);
 
     debugPrint("TreadmillService: Connecting to ${device.platformName}...");
 

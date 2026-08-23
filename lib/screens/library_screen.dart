@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import '../models/activity_type.dart';
 import '../services/database_helper.dart';
 import '../services/sync_service.dart';
+import '../utils/format_utils.dart';
+import '../widgets/profile_selector_capsule.dart';
 import 'package:sqflite/sqflite.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -23,18 +26,7 @@ class LibraryScreenState extends State<LibraryScreen> {
 
   final TextEditingController _searchController = TextEditingController();
 
-  final List<String> _activityTypes = [
-    'All',
-    'HIIT',
-    'STRENGTH',
-    'FUNCTIONAL_STRENGTH',
-    'CORE',
-    'CARDIO',
-    'YOGA',
-    'PILATES',
-    'CALISTHENICS',
-    'OTHER',
-  ];
+  List<String> get _activityTypes => ActivityType.filterOptions;
 
   @override
   void initState() {
@@ -84,70 +76,6 @@ class LibraryScreenState extends State<LibraryScreen> {
     await loadTemplates();
   }
 
-  Widget _buildProfileSelectorAction() {
-    if (_availableProfiles.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Chip(
-          avatar: Icon(Icons.person, size: 14, color: Theme.of(context).colorScheme.primary),
-          label: Text(_profileName, style: const TextStyle(fontSize: 12)),
-          padding: EdgeInsets.zero,
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-      child: PopupMenuButton<String>(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-            ),
-            color: Theme.of(context).colorScheme.surface,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.person,
-                size: 14,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                _profileName,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const Icon(
-                Icons.arrow_drop_down,
-                size: 14,
-                color: Colors.white,
-              ),
-            ],
-          ),
-        ),
-        onSelected: (val) async {
-          await _onProfileChanged(val);
-        },
-        itemBuilder: (context) {
-          return _availableProfiles.map((p) {
-            return PopupMenuItem<String>(
-              value: p,
-              child: Text(p),
-            );
-          }).toList();
-        },
-      ),
-    );
-  }
-
   void _applyFilters() {
     List<Map<String, dynamic>> results = _allTemplates;
 
@@ -169,148 +97,27 @@ class LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
-  String _getActivityName(String code) {
-    switch (code) {
-      case 'HIIT':
-        return 'HIIT / Interval';
-      case 'STRENGTH':
-        return 'Strength Training';
-      case 'FUNCTIONAL_STRENGTH':
-        return 'Functional Strength';
-      case 'CORE':
-        return 'Core Training';
-      case 'CARDIO':
-        return 'Mixed Cardio';
-      case 'YOGA':
-        return 'Yoga';
-      case 'PILATES':
-        return 'Pilates';
-      case 'CALISTHENICS':
-        return 'Calisthenics';
-      default:
-        return 'Other';
-    }
-  }
+  String _getActivityName(String code) => ActivityType.fromString(code).label;
 
-  Color _getActivityColor(String code) {
-    switch (code) {
-      case 'HIIT':
-        return const Color(0xFFBD93F9); // Neon Purple
-      case 'STRENGTH':
-        return const Color(0xFF81A1C1); // Steel Blue
-      case 'FUNCTIONAL_STRENGTH':
-        return const Color(0xFF88C0D0); // Teal
-      case 'CORE':
-        return const Color(0xFFD08770); // Orange
-      case 'CARDIO':
-        return const Color(0xFF0DF2A3); // Mint Neon
-      case 'YOGA':
-        return const Color(0xFFB48EAD); // Lavender
-      case 'PILATES':
-        return const Color(0xFFFF79C6); // Pink
-      case 'CALISTHENICS':
-        return const Color(0xFFEBCB8B); // Yellow
-      default:
-        return const Color(0xFF4C566A); // Gray
-    }
-  }
+  Color _getActivityColor(String code) => ActivityType.fromString(code).color;
 
-  String _formatDuration(int seconds) {
-    if (seconds >= 3600) {
-      final hours = seconds ~/ 3600;
-      final minutes = (seconds % 3600) ~/ 60;
-      return '${hours}h ${minutes}m';
-    }
-    final mins = seconds ~/ 60;
-    final secs = seconds % 60;
-    if (mins == 0) return '${secs}s';
-    if (secs == 0) return '${mins}m';
-    return '${mins}m ${secs}s';
-  }
+  String _formatDuration(int seconds) => FormatUtils.formatDurationConcise(seconds, zeroText: '0s');
 
-  double _secondsToSliderValue(int seconds) {
-    if (seconds <= 300) {
-      final pct = (seconds - 10) / (300 - 10);
-      return pct * 0.5;
-    } else {
-      final pct = (seconds - 300) / (3600 - 300);
-      return 0.5 + pct * 0.5;
-    }
-  }
+  double _secondsToSliderValue(int seconds) => FormatUtils.secondsToWorkSliderValue(seconds);
 
-  int _sliderValueToSeconds(double value) {
-    if (value <= 0.5) {
-      final pct = value / 0.5;
-      final seconds = 10 + (300 - 10) * pct;
-      return ((seconds / 5).round() * 5).clamp(10, 300);
-    } else {
-      final pct = (value - 0.5) / 0.5;
-      final seconds = 300 + (3600 - 300) * pct;
-      return ((seconds / 60).round() * 60).clamp(300, 3600);
-    }
-  }
+  int _sliderValueToSeconds(double value) => FormatUtils.workSliderValueToSeconds(value);
 
-  int _decrementWorkDuration(int current) {
-    if (current <= 10) return 10;
-    if (current <= 300) {
-      return (current - 5).clamp(10, 3600);
-    } else {
-      final newDuration = ((current - 60) / 60).floor() * 60;
-      return newDuration.clamp(300, 3600);
-    }
-  }
+  int _decrementWorkDuration(int current) => FormatUtils.decrementWorkDuration(current);
 
-  int _incrementWorkDuration(int current) {
-    if (current >= 3600) return 3600;
-    if (current < 300) {
-      return (current + 5).clamp(10, 3600);
-    } else {
-      final newDuration = ((current + 60) / 60).floor() * 60;
-      return newDuration.clamp(300, 3600);
-    }
-  }
+  int _incrementWorkDuration(int current) => FormatUtils.incrementWorkDuration(current);
 
-  double _secondsToRestSliderValue(int seconds) {
-    if (seconds <= 120) {
-      final pct = seconds / 120.0;
-      return pct * 0.5;
-    } else {
-      final pct = (seconds - 120) / (900.0 - 120.0);
-      return 0.5 + pct * 0.5;
-    }
-  }
+  double _secondsToRestSliderValue(int seconds) => FormatUtils.secondsToRestSliderValue(seconds);
 
-  int _sliderValueToRestSeconds(double value) {
-    if (value <= 0.5) {
-      final pct = value / 0.5;
-      final seconds = 120.0 * pct;
-      return ((seconds / 5).round() * 5).clamp(0, 120);
-    } else {
-      final pct = (value - 0.5) / 0.5;
-      final seconds = 120.0 + (900.0 - 120.0) * pct;
-      return ((seconds / 30).round() * 30).clamp(120, 900);
-    }
-  }
+  int _sliderValueToRestSeconds(double value) => FormatUtils.restSliderValueToSeconds(value);
 
-  int _decrementRestDuration(int current) {
-    if (current <= 0) return 0;
-    if (current <= 120) {
-      return (current - 5).clamp(0, 900);
-    } else {
-      final newDuration = ((current - 30) / 30).floor() * 30;
-      return newDuration.clamp(120, 900);
-    }
-  }
+  int _decrementRestDuration(int current) => FormatUtils.decrementRestDuration(current);
 
-  int _incrementRestDuration(int current) {
-    if (current >= 900) return 900;
-    if (current < 120) {
-      return (current + 5).clamp(0, 900);
-    } else {
-      final newDuration = ((current + 30) / 30).floor() * 30;
-      return newDuration.clamp(120, 900);
-    }
-  }
+  int _incrementRestDuration(int current) => FormatUtils.incrementRestDuration(current);
 
 
 
@@ -921,7 +728,11 @@ class LibraryScreenState extends State<LibraryScreen> {
           : AppBar(
               title: const Text('Workout Library'),
               actions: [
-                _buildProfileSelectorAction(),
+                ProfileSelectorCapsule(
+                  currentProfile: _profileName,
+                  availableProfiles: _availableProfiles,
+                  onProfileSelected: _onProfileChanged,
+                ),
                 IconButton(
                   icon: const Icon(Icons.sync),
                   onPressed: () async {

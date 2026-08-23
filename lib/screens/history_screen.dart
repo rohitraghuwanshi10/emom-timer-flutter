@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/database_helper.dart';
+import '../widgets/profile_selector_capsule.dart';
 import 'details_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -60,70 +61,6 @@ class HistoryScreenState extends State<HistoryScreen> {
     await _loadHistory();
   }
 
-  Widget _buildProfileSelectorAction() {
-    if (_availableProfiles.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Chip(
-          avatar: Icon(Icons.person, size: 14, color: Theme.of(context).colorScheme.primary),
-          label: Text(_profileName, style: const TextStyle(fontSize: 12)),
-          padding: EdgeInsets.zero,
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-      child: PopupMenuButton<String>(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-            ),
-            color: Theme.of(context).colorScheme.surface,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.person,
-                size: 14,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                _profileName,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const Icon(
-                Icons.arrow_drop_down,
-                size: 14,
-                color: Colors.white,
-              ),
-            ],
-          ),
-        ),
-        onSelected: (val) async {
-          await _onProfileChanged(val);
-        },
-        itemBuilder: (context) {
-          return _availableProfiles.map((p) {
-            return PopupMenuItem<String>(
-              value: p,
-              child: Text(p),
-            );
-          }).toList();
-        },
-      ),
-    );
-  }
-
   String _formatDate(String dateStr) {
     try {
       // dateStr is 'YYYY-MM-DD'
@@ -145,7 +82,11 @@ class HistoryScreenState extends State<HistoryScreen> {
           : AppBar(
               title: const Text('Workout History'),
               actions: [
-                _buildProfileSelectorAction(),
+                ProfileSelectorCapsule(
+                  currentProfile: _profileName,
+                  availableProfiles: _availableProfiles,
+                  onProfileSelected: _onProfileChanged,
+                ),
                 IconButton(
                   icon: const Icon(Icons.refresh),
                   onPressed: _loadHistory,

@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/database_helper.dart';
 import '../services/sync_service.dart';
+import '../theme/app_colors.dart';
 
 class DetailsScreen extends StatefulWidget {
   final String dateStr;
@@ -26,14 +27,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
   int _maxHr = 180;
   String _distanceUnitPref = 'km';
 
-  final List<Color> _nordColors = const [
-    Color(0xFF0DF2A3), // Mint Neon
-    Color(0xFFFF7A00), // Vibrant Orange
-    Color(0xFF38B6FF), // Cyan/Blue
-    Color(0xFFFFD60A), // Yellow
-    Color(0xFFFF3B30), // Red
-    Color(0xFFBF5AF2), // Purple
-  ];
+  List<Color> get _nordColors => AppColors.chartColors;
 
   @override
   void initState() {

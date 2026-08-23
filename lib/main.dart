@@ -12,6 +12,8 @@ import 'services/bluetooth_service.dart';
 import 'services/treadmill_service.dart';
 import 'services/hrr_service.dart';
 import 'firebase_options.dart';
+import 'theme/app_colors.dart';
+import 'widgets/bluetooth_device_modal.dart';
 import 'dart:async';
 
 void main() async {
@@ -39,40 +41,31 @@ class EmomTimerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ChronoPulse Active Premium Neon Colors (inspired by custom app icon)
-    final Color deepBg = const Color(0xFF0C101B);      // Deep Slate Charcoal Blue
-    final Color deepSurface = const Color(0xFF171E2D); // Deep Slate Card Surface
-    final Color mintNeon = const Color(0xFF0DF2A3);    // Mint Neon Accent (Primary / Go)
-    final Color orangeNeon = const Color(0xFFFF7A00);  // Vibrant Orange Accent (Secondary / Rest)
-    final Color redNeon = const Color(0xFFFF3B30);     // Neon Red Accent (Stop/Error)
-    final Color textPrimary = const Color(0xFFECEFF4);  // White Text
-    final Color textSecondary = const Color(0xFF8E9AA8); // Slate Secondary Text
-
     return MaterialApp(
       title: 'ChronoPulse Active',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: deepBg,
-        primaryColor: mintNeon,
-        colorScheme: ColorScheme.dark(
-          primary: mintNeon,
-          secondary: orangeNeon,
-          surface: deepSurface,
-          error: redNeon,
-          onPrimary: deepBg,
-          onSecondary: deepBg,
-          onSurface: textPrimary,
-          onError: textPrimary,
+        scaffoldBackgroundColor: AppColors.deepBg,
+        primaryColor: AppColors.mintNeon,
+        colorScheme: const ColorScheme.dark(
+          primary: AppColors.mintNeon,
+          secondary: AppColors.orangeNeon,
+          surface: AppColors.deepSurface,
+          error: AppColors.redNeon,
+          onPrimary: AppColors.deepBg,
+          onSecondary: AppColors.deepBg,
+          onSurface: AppColors.textPrimary,
+          onError: AppColors.textPrimary,
         ),
-        appBarTheme: AppBarTheme(
-          backgroundColor: deepSurface,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: AppColors.deepSurface,
           elevation: 0,
-          titleTextStyle: TextStyle(color: textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
+          titleTextStyle: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
         ),
         bottomNavigationBarTheme: BottomNavigationBarThemeData(
-          backgroundColor: deepSurface,
-          selectedItemColor: mintNeon,
-          unselectedItemColor: textSecondary.withValues(alpha: 0.6),
+          backgroundColor: AppColors.deepSurface,
+          selectedItemColor: AppColors.mintNeon,
+          unselectedItemColor: AppColors.textSecondary.withValues(alpha: 0.6),
         ),
       ),
       home: const MainNavigationScreen(),
