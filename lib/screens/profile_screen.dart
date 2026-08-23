@@ -4,6 +4,7 @@ import '../services/database_helper.dart';
 import '../services/sync_service.dart';
 import '../services/health_service.dart';
 import '../widgets/profile_selector_capsule.dart';
+import '../utils/responsive_utils.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -237,9 +238,9 @@ class ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
+    final bool isPhoneLandscape = context.isPhoneLandscape;
     return Scaffold(
-      appBar: isLandscape
+      appBar: isPhoneLandscape
           ? null
           : AppBar(
               title: const Text('Profile Management'),
@@ -255,7 +256,7 @@ class ProfileScreenState extends State<ProfileScreen> {
                 )
               ],
             ),
-      floatingActionButton: isLandscape
+      floatingActionButton: isPhoneLandscape
           ? FloatingActionButton(
               onPressed: _saveProfile,
               backgroundColor: Theme.of(context).colorScheme.primary,
@@ -263,11 +264,14 @@ class ProfileScreenState extends State<ProfileScreen> {
               child: const Icon(Icons.save),
             )
           : null,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 750),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             const Text('Heart Rate Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 16),
              Row(
@@ -458,7 +462,9 @@ class ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildPresetField(String label, double valueKmh, ValueChanged<double> onChanged) {

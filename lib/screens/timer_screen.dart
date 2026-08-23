@@ -20,6 +20,7 @@ import '../widgets/recovery_tracking_banner.dart';
 import '../widgets/live_heart_rate_display.dart';
 import '../widgets/bluetooth_device_modal.dart';
 import '../widgets/customize_workout_sheet.dart';
+import '../utils/responsive_utils.dart';
 
 class TimerScreen extends StatefulWidget {
   const TimerScreen({super.key});
@@ -864,62 +865,58 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
   void _showCustomizeWorkoutSheet() {
     final hasTreadmill = TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout;
-    showModalBottomSheet(
+    ResponsiveUtils.showAdaptiveModal(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return CustomizeWorkoutSheet(
-          workDuration: _workDuration,
-          onWorkDurationChanged: (val) => setState(() {
-            _workDuration = val;
-            if (_currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED) {
-              _currentEvent = WorkoutEvent(
-                state: WorkoutState.IDLE,
-                timeRemaining: val,
-                currentRound: 0,
-                totalRounds: _totalRounds,
-                isWaitingForHr: false,
-              );
-            }
-          }),
-          restDuration: _restDuration,
-          onRestDurationChanged: (val) => setState(() => _restDuration = val),
-          totalRounds: _totalRounds,
-          onTotalRoundsChanged: (val) => setState(() => _totalRounds = val),
-          autoRegulationEnabled: _autoRegulationEnabled,
-          onAutoRegulationChanged: _isBluetoothConnected ? (val) => setState(() => _autoRegulationEnabled = val) : null,
-          maxPreworkHr: _maxPreworkHr,
-          continuousMode: _continuousMode,
-          onContinuousModeChanged: (val) => setState(() => _continuousMode = val),
-          activityType: _activityType,
-          onActivityTypeChanged: (val) => setState(() => _activityType = val),
-          weightMoved: _weightMoved,
-          onWeightMovedChanged: (val) => setState(() => _weightMoved = val),
-          weightUnit: _weightUnit,
-          onWeightUnitChanged: (val) => setState(() => _weightUnit = val),
-          ruckWeight: _ruckWeight,
-          onRuckWeightChanged: (val) => setState(() => _ruckWeight = val),
-          ruckWeightUnit: _ruckWeightUnit,
-          onRuckWeightUnitChanged: (val) => setState(() => _ruckWeightUnit = val),
-          repsPerRound: _repsPerRound,
-          onRepsPerRoundChanged: (val) => setState(() => _repsPerRound = val),
-          repsCompleted: _repsCompleted,
-          onRepsCompletedChanged: (val) => setState(() => _repsCompleted = val),
-          notesController: _notesController,
-          hasTreadmill: hasTreadmill,
-          treadmillConnected: _treadmillConnectionState == BluetoothConnectionState.connected,
-          distanceUnitPref: _distanceUnitPref,
-          autoSpeedSync: TreadmillBluetoothService.instance.autoSpeedSync,
-          onAutoSpeedSyncChanged: (val) => setState(() => TreadmillBluetoothService.instance.autoSpeedSync = val),
-          workSpeed: TreadmillBluetoothService.instance.workSpeed,
-          onWorkSpeedChanged: (val) => setState(() => TreadmillBluetoothService.instance.workSpeed = val),
-          restSpeed: TreadmillBluetoothService.instance.restSpeed,
-          onRestSpeedChanged: (val) => setState(() => TreadmillBluetoothService.instance.restSpeed = val),
-          onSaveTemplate: _showSaveTemplateDialog,
-          onHelpRequested: _showHelpDialog,
-        );
-      },
+      child: CustomizeWorkoutSheet(
+        workDuration: _workDuration,
+        onWorkDurationChanged: (val) => setState(() {
+          _workDuration = val;
+          if (_currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED) {
+            _currentEvent = WorkoutEvent(
+              state: WorkoutState.IDLE,
+              timeRemaining: val,
+              currentRound: 0,
+              totalRounds: _totalRounds,
+              isWaitingForHr: false,
+            );
+          }
+        }),
+        restDuration: _restDuration,
+        onRestDurationChanged: (val) => setState(() => _restDuration = val),
+        totalRounds: _totalRounds,
+        onTotalRoundsChanged: (val) => setState(() => _totalRounds = val),
+        autoRegulationEnabled: _autoRegulationEnabled,
+        onAutoRegulationChanged: _isBluetoothConnected ? (val) => setState(() => _autoRegulationEnabled = val) : null,
+        maxPreworkHr: _maxPreworkHr,
+        continuousMode: _continuousMode,
+        onContinuousModeChanged: (val) => setState(() => _continuousMode = val),
+        activityType: _activityType,
+        onActivityTypeChanged: (val) => setState(() => _activityType = val),
+        weightMoved: _weightMoved,
+        onWeightMovedChanged: (val) => setState(() => _weightMoved = val),
+        weightUnit: _weightUnit,
+        onWeightUnitChanged: (val) => setState(() => _weightUnit = val),
+        ruckWeight: _ruckWeight,
+        onRuckWeightChanged: (val) => setState(() => _ruckWeight = val),
+        ruckWeightUnit: _ruckWeightUnit,
+        onRuckWeightUnitChanged: (val) => setState(() => _ruckWeightUnit = val),
+        repsPerRound: _repsPerRound,
+        onRepsPerRoundChanged: (val) => setState(() => _repsPerRound = val),
+        repsCompleted: _repsCompleted,
+        onRepsCompletedChanged: (val) => setState(() => _repsCompleted = val),
+        notesController: _notesController,
+        hasTreadmill: hasTreadmill,
+        treadmillConnected: _treadmillConnectionState == BluetoothConnectionState.connected,
+        distanceUnitPref: _distanceUnitPref,
+        autoSpeedSync: TreadmillBluetoothService.instance.autoSpeedSync,
+        onAutoSpeedSyncChanged: (val) => setState(() => TreadmillBluetoothService.instance.autoSpeedSync = val),
+        workSpeed: TreadmillBluetoothService.instance.workSpeed,
+        onWorkSpeedChanged: (val) => setState(() => TreadmillBluetoothService.instance.workSpeed = val),
+        restSpeed: TreadmillBluetoothService.instance.restSpeed,
+        onRestSpeedChanged: (val) => setState(() => TreadmillBluetoothService.instance.restSpeed = val),
+        onSaveTemplate: _showSaveTemplateDialog,
+        onHelpRequested: _showHelpDialog,
+      ),
     );
   }
 
@@ -982,11 +979,11 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
     if (totalPhaseDuration <= 0) totalPhaseDuration = 1;
 
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
+    final bool useWide = context.useWideLayout;
     final size = MediaQuery.of(context).size;
-    final double timerSize = customSize ?? (isLandscape 
-        ? 160.0 
-        : (size.width < size.height ? size.width * 0.8 : size.height * 0.6).clamp(200.0, 600.0));
+    final double timerSize = customSize ?? (useWide
+        ? (size.height * 0.45).clamp(160.0, 360.0)
+        : (size.width * 0.8).clamp(200.0, 500.0));
     
     final double timeFontSize = timerSize * 0.29;
     final double stateFontSize = timerSize * 0.085;
@@ -1119,15 +1116,15 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   @override
   Widget build(BuildContext context) {
     final bool isIdle = _currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED;
-    final bool isNarrow = MediaQuery.of(context).size.width < 600;
-    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
+    final bool useWide = context.useWideLayout;
+    final bool hideAppBar = context.isPhoneLandscape;
     final bool showTreadmillStop = !isIdle &&
         TreadmillBluetoothService.instance.treadmillEnabled &&
         _treadmillWorkout &&
         _treadmillConnectionState == BluetoothConnectionState.connected;
 
     return Scaffold(
-      appBar: isLandscape
+      appBar: hideAppBar
           ? null
           : AppBar(
               centerTitle: true,
@@ -1147,7 +1144,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                 ),
               ],
             ),
-      body: isLandscape
+      body: useWide
           ? SafeArea(
               top: true,
               bottom: false,
@@ -1156,28 +1153,31 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Left Column: Scrollable Stats & Telemetry (50% Width)
+                  // Left Pane: Timer Circle, Live HR, and Inline Action Buttons
                   Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Top control bar inline: Loaded Template badge with Close/Unload action
-                          if (_loadedTemplateName != null) ...[
-                            Center(child: _buildLoadedTemplateBadge(isIdle)!),
-                            const SizedBox(height: 12),
-                          ],
-                          _buildLiveHeartRateDisplay(),
-                          _buildRecoveryTrackingBanner(),
-                          const SizedBox(height: 16),
-                          _buildLiveTreadmillTelemetry(),
-                          if (isIdle) ...[
-                            const SizedBox(height: 8),
-                            _buildWorkoutSummaryCard(),
-                          ],
-                        ],
-                      ),
+                    flex: 5,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final availableHeight = constraints.maxHeight;
+                        final timerSize = (availableHeight * 0.52).clamp(150.0, 360.0);
+
+                        return Center(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                _buildTimerDisplay(customSize: timerSize),
+                                const SizedBox(height: 16),
+                                _buildInlineControls(isIdle, showTreadmillStop),
+                                const SizedBox(height: 12),
+                                _buildLiveHeartRateDisplay(),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   // Divider
@@ -1186,133 +1186,107 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     thickness: 1,
                     color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.15),
                   ),
-                  // Right Column: Dynamically-sized Timer Circle and controls (50% Width)
+                  // Right Pane: Loaded Template, HR Recovery, Treadmill Telemetry & Workout Details
                   Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final availableHeight = constraints.maxHeight;
-                        // Dynamically size timer circle to fit height nicely (leave ~90px for spacing/controls)
-                        final timerSize = (availableHeight - 90).clamp(140.0, 260.0);
-
-                        return Center(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                _buildTimerDisplay(customSize: timerSize),
+                    flex: 6,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 700),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              if (_loadedTemplateName != null) ...[
+                                Center(child: _buildLoadedTemplateBadge(isIdle)!),
                                 const SizedBox(height: 12),
-                                _buildInlineControls(isIdle, showTreadmillStop),
                               ],
-                            ),
+                              _buildRecoveryTrackingBanner(),
+                              const SizedBox(height: 8),
+                              _buildLiveTreadmillTelemetry(),
+                              if (isIdle) ...[
+                                const SizedBox(height: 8),
+                                _buildWorkoutSummaryCard(),
+                              ],
+                            ],
                           ),
-                        );
-                      },
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
             )
           : SingleChildScrollView(
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 16),
-                    _buildTimerDisplay(),
-                    const SizedBox(height: 24),
-                    _buildLiveHeartRateDisplay(),
-                    _buildRecoveryTrackingBanner(),
-                    const SizedBox(height: 24),
-                    _buildLiveTreadmillTelemetry(),
-                    const SizedBox(height: 24),
-                    if (isIdle) _buildWorkoutSummaryCard(),
-                  ],
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 16),
+                      _buildTimerDisplay(),
+                      const SizedBox(height: 24),
+                      _buildLiveHeartRateDisplay(),
+                      _buildRecoveryTrackingBanner(),
+                      const SizedBox(height: 24),
+                      _buildLiveTreadmillTelemetry(),
+                      const SizedBox(height: 24),
+                      if (isIdle) _buildWorkoutSummaryCard(),
+                      const SizedBox(height: 80),
+                    ],
+                  ),
                 ),
               ),
             ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: isLandscape
+      floatingActionButton: useWide
           ? null
           : (isIdle
-              ? (isNarrow
-                  ? FloatingActionButton(
-                      heroTag: 'start_btn',
-                      onPressed: _startWorkout,
-                      backgroundColor: Theme.of(context).colorScheme.secondary,
-                      child: const Icon(Icons.play_arrow),
-                    )
-                  : FloatingActionButton.extended(
-                      heroTag: 'start_btn',
-                      onPressed: _startWorkout,
-                      backgroundColor: Theme.of(context).colorScheme.secondary,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Start'),
-                    ))
+              ? FloatingActionButton.extended(
+                  heroTag: 'start_btn',
+                  onPressed: _startWorkout,
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Start'),
+                )
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    isNarrow
-                        ? FloatingActionButton(
-                            heroTag: 'pause_btn',
-                            onPressed: () => _engine?.pause(),
-                            backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
-                                ? Theme.of(context).colorScheme.secondary 
-                                : Colors.orange,
-                            child: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
-                          )
-                        : FloatingActionButton.extended(
-                            heroTag: 'pause_btn',
-                            onPressed: () => _engine?.pause(),
-                            backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
-                                ? Theme.of(context).colorScheme.secondary 
-                                : Colors.orange,
-                            icon: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
-                            label: Text(_currentEvent.state == WorkoutState.PAUSED ? 'Resume' : 'Pause'),
-                          ),
+                    FloatingActionButton.extended(
+                      heroTag: 'pause_btn',
+                      onPressed: () => _engine?.pause(),
+                      backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
+                          ? Theme.of(context).colorScheme.secondary 
+                          : Colors.orange,
+                      icon: Icon(_currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause),
+                      label: Text(_currentEvent.state == WorkoutState.PAUSED ? 'Resume' : 'Pause'),
+                    ),
                     if (showTreadmillStop) ...[
                       const SizedBox(width: 16),
-                      isNarrow
-                          ? FloatingActionButton(
-                              heroTag: 'tm_stop_btn',
-                              onPressed: () {
-                                TreadmillBluetoothService.instance.stop();
-                                _engine?.pause();
-                              },
-                              backgroundColor: Colors.red,
-                              child: const Icon(Icons.pan_tool, color: Colors.white),
-                            )
-                          : FloatingActionButton.extended(
-                              heroTag: 'tm_stop_btn',
-                              onPressed: () {
-                                TreadmillBluetoothService.instance.stop();
-                                _engine?.pause();
-                              },
-                              backgroundColor: Colors.red,
-                              icon: const Icon(Icons.pan_tool, color: Colors.white),
-                              label: const Text('STOP TREADMILL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            ),
+                      FloatingActionButton.extended(
+                        heroTag: 'tm_stop_btn',
+                        onPressed: () {
+                          TreadmillBluetoothService.instance.stop();
+                          _engine?.pause();
+                        },
+                        backgroundColor: Colors.red,
+                        icon: const Icon(Icons.pan_tool, color: Colors.white),
+                        label: const Text('STOP TREADMILL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
                     ],
                     const SizedBox(width: 16),
-                    isNarrow
-                        ? FloatingActionButton(
-                            heroTag: 'stop_btn',
-                            onPressed: _stopWorkout,
-                            backgroundColor: Theme.of(context).colorScheme.error,
-                            child: const Icon(Icons.stop),
-                          )
-                        : FloatingActionButton.extended(
-                            heroTag: 'stop_btn',
-                            onPressed: _stopWorkout,
-                            backgroundColor: Theme.of(context).colorScheme.error,
-                            icon: const Icon(Icons.stop),
-                            label: const Text('End'),
-                          ),
+                    FloatingActionButton.extended(
+                      heroTag: 'stop_btn',
+                      onPressed: _stopWorkout,
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                      icon: const Icon(Icons.stop),
+                      label: const Text('End'),
+                    ),
                   ],
                 )),
     );
+  }
   }
 
   Widget _buildInlineControls(bool isIdle, bool showTreadmillStop) {
@@ -1432,13 +1406,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   }
 
   void _showBluetoothDeviceManager() {
-    showModalBottomSheet(
+    ResponsiveUtils.showAdaptiveModal(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return const BluetoothDeviceManagerSheet();
-      },
+      child: const BluetoothDeviceManagerSheet(),
     );
   }
 

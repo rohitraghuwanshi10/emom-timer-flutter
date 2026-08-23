@@ -578,27 +578,32 @@ class _DetailsScreenState extends State<DetailsScreen> {
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
-        : ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                color: Theme.of(context).colorScheme.surface,
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: _buildDataTable(),
-                ),
+        : Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1000),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Card(
+                    color: Theme.of(context).colorScheme.surface,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: _buildDataTable(),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text('Cumulative Daily Heart Rate Intensity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  Card(
+                    color: Theme.of(context).colorScheme.surface,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: _buildGraph(),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 24),
-              const Text('Cumulative Daily Heart Rate Intensity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              Card(
-                color: Theme.of(context).colorScheme.surface,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: _buildGraph(),
-                ),
-              ),
-            ],
+            ),
           ),
     );
   }

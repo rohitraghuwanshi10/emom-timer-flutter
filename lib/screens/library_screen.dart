@@ -4,6 +4,7 @@ import '../services/database_helper.dart';
 import '../services/sync_service.dart';
 import '../utils/format_utils.dart';
 import '../widgets/profile_selector_capsule.dart';
+import '../utils/responsive_utils.dart';
 import 'package:sqflite/sqflite.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -192,14 +193,13 @@ class LibraryScreenState extends State<LibraryScreen> {
     final ruckWeightController = TextEditingController(text: rawRuckWeight > 0 ? rawRuckWeight.toString() : '');
     final repsController = TextEditingController(text: rawRepsPerRound.toString());
 
-    showModalBottomSheet(
+    ResponsiveUtils.showAdaptiveModal(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
+      maxWidth: 600,
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        child: StatefulBuilder(
           builder: (context, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
@@ -712,18 +712,17 @@ class LibraryScreenState extends State<LibraryScreen> {
               ),
             );
           },
-        );
-      },
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool useHorizontalLayout = isLandscape || screenWidth > 680;
+    final bool isPhoneLandscape = context.isPhoneLandscape;
+    final bool useHorizontalLayout = context.useWideLayout;
     return Scaffold(
-      appBar: isLandscape
+      appBar: isPhoneLandscape
           ? null
           : AppBar(
               title: const Text('Workout Library'),
@@ -751,7 +750,10 @@ class LibraryScreenState extends State<LibraryScreen> {
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.add),
       ),
-      body: Column(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: Column(
         children: [
           // Search & Filter Panel
           Container(
@@ -795,7 +797,7 @@ class LibraryScreenState extends State<LibraryScreen> {
                         ),
                       ),
                     ),
-                    if (isLandscape) ...[
+                    if (isPhoneLandscape) ...[
                       const SizedBox(width: 8),
                       IconButton(
                         icon: const Icon(Icons.sync),
@@ -1227,10 +1229,11 @@ class LibraryScreenState extends State<LibraryScreen> {
                       );
                     },
                   ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
-    );
-  }
+    ),
+  );
 }
-
+}

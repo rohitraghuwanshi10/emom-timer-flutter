@@ -14,6 +14,7 @@ import 'services/hrr_service.dart';
 import 'firebase_options.dart';
 import 'theme/app_colors.dart';
 import 'widgets/bluetooth_device_modal.dart';
+import 'utils/responsive_utils.dart';
 import 'dart:async';
 
 void main() async {
@@ -244,11 +245,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         size: 20,
       ),
       onPressed: () {
-        showModalBottomSheet(
+        ResponsiveUtils.showAdaptiveModal(
           context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => const BluetoothDeviceManagerSheet(),
+          child: const BluetoothDeviceManagerSheet(),
         );
       },
     );
@@ -256,7 +255,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
+    final bool showRail = context.useWideLayout && !context.isPhoneLandscape;
+    final bool hideNav = context.isPhoneLandscape;
 
     final Widget mainBody = PageView(
       controller: _pageController,
@@ -309,7 +309,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
 
     return Scaffold(
-      body: isLandscape
+      body: showRail
           ? Row(
               children: [
                 NavigationRail(
@@ -379,7 +379,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               ],
             )
           : mainBody,
-      bottomNavigationBar: isLandscape
+      bottomNavigationBar: (showRail || hideNav)
           ? null
           : BottomNavigationBar(
               currentIndex: _currentIndex,
