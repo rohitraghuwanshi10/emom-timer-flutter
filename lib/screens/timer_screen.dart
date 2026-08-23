@@ -1287,10 +1287,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                 )),
     );
   }
-  }
 
   Widget _buildInlineControls(bool isIdle, bool showTreadmillStop) {
-    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape && MediaQuery.of(context).size.height < 500;
+    final bool isLandscape = context.useWideLayout;
     if (isIdle) {
       return ElevatedButton.icon(
         onPressed: _startWorkout,
