@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../models/workout_engine.dart';
@@ -962,33 +963,20 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       stateColor = Colors.grey;
     }
 
-    int totalPhaseDuration = 1;
-    switch (displayState) {
-      case WorkoutState.PREP:
-        totalPhaseDuration = 10;
-        break;
-      case WorkoutState.WORK:
-        totalPhaseDuration = _workDuration;
-        break;
-      case WorkoutState.REST:
-        totalPhaseDuration = _restDuration;
-        break;
-      default:
-        totalPhaseDuration = 1;
-    }
-
-    if (totalPhaseDuration <= 0) totalPhaseDuration = 1;
-
     final bool useWide = context.useWideLayout;
     final size = MediaQuery.of(context).size;
     final double timerSize = customSize ?? (useWide
-        ? (size.height * 0.45).clamp(160.0, 360.0)
-        : (size.width * 0.8).clamp(200.0, 500.0));
+        ? (size.height * 0.58).clamp(240.0, 520.0)
+        : (size.width * 0.82).clamp(220.0, 520.0));
     
-    final double timeFontSize = timerSize * 0.29;
-    final double stateFontSize = timerSize * 0.085;
-    final double roundFontSize = timerSize * 0.065;
-    final double strokeWidth = timerSize * 0.03;
+    final double timeFontSize = timerSize * 0.28;
+    final double stateFontSize = (timerSize * 0.085).clamp(16.0, 42.0);
+    final double roundFontSize = (timerSize * 0.065).clamp(13.0, 32.0);
+    final double strokeWidth = (timerSize * 0.045).clamp(12.0, 22.0);
+
+    final String timeStr = _currentEvent.state == WorkoutState.IDLE 
+        ? '${(_workDuration ~/ 60).toString().padLeft(2, '0')}:${(_workDuration % 60).toString().padLeft(2, '0')}' 
+        : '${(_currentEvent.timeRemaining ~/ 60).toString().padLeft(2, '0')}:${(_currentEvent.timeRemaining % 60).toString().padLeft(2, '0')}';
 
     return SizedBox(
       width: timerSize,
@@ -1003,7 +991,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                   ? null 
                   : _progressController.value,
               strokeWidth: strokeWidth,
-              backgroundColor: stateColor.withValues(alpha: 0.2),
+              strokeCap: StrokeCap.round,
+              backgroundColor: stateColor.withValues(alpha: 0.18),
               valueColor: AlwaysStoppedAnimation<Color>(stateColor),
             ),
           ),
@@ -1013,20 +1002,36 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               children: [
                 Text(
                   stateText,
-                  style: TextStyle(color: stateColor, fontSize: stateFontSize, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: timerSize * 0.03),
-                Text(
-                  _currentEvent.state == WorkoutState.IDLE 
-                    ? '${(_workDuration ~/ 60).toString().padLeft(2, '0')}:${(_workDuration % 60).toString().padLeft(2, '0')}' 
-                    : '${(_currentEvent.timeRemaining ~/ 60).toString().padLeft(2, '0')}:${(_currentEvent.timeRemaining % 60).toString().padLeft(2, '0')}',
-                  style: TextStyle(fontSize: timeFontSize, fontWeight: FontWeight.w200),
-                ),
-                if (_currentEvent.state != WorkoutState.IDLE && _currentEvent.state != WorkoutState.FINISHED)
-                  Text(
-                    'Round ${_currentEvent.currentRound} / ${_currentEvent.totalRounds}',
-                    style: TextStyle(fontSize: roundFontSize, color: Colors.grey),
+                  style: TextStyle(
+                    color: stateColor,
+                    fontSize: stateFontSize,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 3.5,
                   ),
+                ),
+                SizedBox(height: timerSize * 0.02),
+                Text(
+                  timeStr,
+                  style: TextStyle(
+                    fontSize: timeFontSize,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -1.0,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    color: Colors.white,
+                  ),
+                ),
+                if (_currentEvent.state != WorkoutState.IDLE && _currentEvent.state != WorkoutState.FINISHED) ...[
+                  SizedBox(height: timerSize * 0.015),
+                  Text(
+                    'ROUND ${_currentEvent.currentRound} / ${_continuousMode ? '∞' : _currentEvent.totalRounds}',
+                    style: TextStyle(
+                      fontSize: roundFontSize,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white70,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1113,6 +1118,493 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     );
   }
 
+  Widget _buildLiveWorkoutDashboard() {
+    final bool isTreadmill = TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout;
+    final bool isStrength = ActivityType.fromString(_activityType).isStrengthBased;
+    
+    // Live metrics calculations
+    int peakHr = 0;
+    int avgHr = 0;
+    if (_hrDetails.isNotEmpty) {
+      final bpms = _hrDetails.map((x) => x['bpm'] as int).toList();
+      peakHr = bpms.reduce((a, b) => a > b ? a : b);
+      avgHr = (bpms.reduce((a, b) => a + b) / bpms.length).round();
+    } else if (_currentHr > 0) {
+      peakHr = _currentHr;
+      avgHr = _currentHr;
+    }
+
+    final int elapsedSec = _workoutStartTime != null
+        ? DateTime.now().difference(_workoutStartTime!).inSeconds
+        : ((_engine?.workTimeSec ?? 0) + (_engine?.restTimeSec ?? 0));
+
+    final double caloriesBurnt = CalorieCalculator.calculateCaloriesBurnt(
+      avgHr: avgHr > 0 ? avgHr : (_currentHr > 0 ? _currentHr : 120),
+      weightKg: _weightKg,
+      totalTimeSec: elapsedSec,
+      birthDateStr: _birthDate,
+      sex: _sex,
+    );
+
+    final double kcalPerMin = elapsedSec > 30 ? (caloriesBurnt / (elapsedSec / 60.0)) : 0.0;
+    final currentRnd = _currentEvent.currentRound.clamp(1, _totalRounds > 0 ? _totalRounds : 999);
+    final double accumVolume = isStrength ? (currentRnd * _repsPerRound * _weightMoved) : 0.0;
+
+    // Up next determination
+    String upNextLabel;
+    IconData upNextIcon;
+    Color upNextColor;
+    if (_currentEvent.state == WorkoutState.PREP) {
+      upNextLabel = 'Round 1 Work (${_formatDuration(_workDuration)})';
+      upNextIcon = Icons.fitness_center;
+      upNextColor = Theme.of(context).colorScheme.secondary;
+    } else if (_currentEvent.state == WorkoutState.WORK) {
+      if (_currentEvent.currentRound >= _totalRounds && !_continuousMode) {
+        upNextLabel = 'Workout Complete 🎉';
+        upNextIcon = Icons.emoji_events;
+        upNextColor = Colors.amber;
+      } else {
+        upNextLabel = 'Round ${_currentEvent.currentRound} Rest (${_restDuration == 0 ? 'None' : _formatDuration(_restDuration)})';
+        upNextIcon = Icons.coffee;
+        upNextColor = Theme.of(context).colorScheme.primary;
+      }
+    } else if (_currentEvent.state == WorkoutState.REST) {
+      upNextLabel = 'Round ${_currentEvent.currentRound + 1} Work (${_formatDuration(_workDuration)})';
+      upNextIcon = Icons.fitness_center;
+      upNextColor = Theme.of(context).colorScheme.secondary;
+    } else {
+      upNextLabel = 'Workout in Progress';
+      upNextIcon = Icons.timer;
+      upNextColor = Colors.grey;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. Header: Activity Type, Template Name & "Up Next" Card
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _getActivityColor(_activityType).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _getActivityColor(_activityType).withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.fitness_center, size: 13, color: _getActivityColor(_activityType)),
+                        const SizedBox(width: 5),
+                        Text(
+                          _getActivityName(_activityType),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _getActivityColor(_activityType),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (_loadedTemplateName != null)
+                    Expanded(
+                      child: Text(
+                        _loadedTemplateName!,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  const Spacer(),
+                  // Elapsed time pill
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_outlined, size: 13, color: Colors.grey),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Elapsed: ${_formatDuration(elapsedSec)}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1, color: Colors.white12),
+              const SizedBox(height: 12),
+              // Up Next Row
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: upNextColor.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(upNextIcon, size: 16, color: upNextColor),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'UP NEXT',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                          color: upNextColor,
+                        ),
+                      ),
+                      Text(
+                        upNextLabel,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 2. Segmented Round Tracker
+        _buildLiveRoundTracker(),
+        const SizedBox(height: 14),
+
+        // 3. Live Telemetry 2x2 Grid
+        _buildLiveTelemetryGrid(
+          peakHr: peakHr,
+          avgHr: avgHr,
+          caloriesBurnt: caloriesBurnt,
+          kcalPerMin: kcalPerMin,
+          elapsedSec: elapsedSec,
+          isStrength: isStrength,
+          accumVolume: accumVolume,
+        ),
+
+        // 4. Live Treadmill Telemetry (if connected)
+        if (isTreadmill) ...[
+          const SizedBox(height: 14),
+          _buildLiveTreadmillTelemetry(),
+        ],
+
+        // 5. Notes / Cues (if available)
+        if (_notesController.text.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.tips_and_updates_outlined, size: 16, color: Colors.amber),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'WORKOUT CUES & NOTES',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.amber),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _notesController.text,
+                        style: const TextStyle(fontSize: 13, color: Colors.white70, height: 1.3),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLiveRoundTracker() {
+    final current = _currentEvent.currentRound;
+    final total = _totalRounds;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'ROUND PROGRESSION',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  color: Colors.grey.shade400,
+                ),
+              ),
+              Text(
+                _continuousMode ? 'Round $current (Open-Ended)' : 'Round $current of $total',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (!_continuousMode && total <= 24)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: List.generate(total, (index) {
+                final roundNum = index + 1;
+                final bool isCompleted = roundNum < current;
+                final bool isCurrent = roundNum == current;
+
+                Color bgColor;
+                Color borderColor;
+                Color textColor;
+
+                if (isCompleted) {
+                  bgColor = Theme.of(context).colorScheme.primary.withValues(alpha: 0.2);
+                  borderColor = Theme.of(context).colorScheme.primary;
+                  textColor = Theme.of(context).colorScheme.primary;
+                } else if (isCurrent) {
+                  bgColor = Theme.of(context).colorScheme.secondary.withValues(alpha: 0.25);
+                  borderColor = Theme.of(context).colorScheme.secondary;
+                  textColor = Theme.of(context).colorScheme.secondary;
+                } else {
+                  bgColor = Colors.white.withValues(alpha: 0.04);
+                  borderColor = Colors.white12;
+                  textColor = Colors.white38;
+                }
+
+                return Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: borderColor, width: isCurrent ? 2 : 1),
+                  ),
+                  alignment: Alignment.center,
+                  child: isCompleted
+                      ? Icon(Icons.check, size: 16, color: textColor)
+                      : Text(
+                          '$roundNum',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isCurrent ? FontWeight.w900 : FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                );
+              }),
+            )
+          else
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: _continuousMode
+                    ? null
+                    : (total > 0 ? (current / total).clamp(0.0, 1.0) : 0.0),
+                minHeight: 12,
+                backgroundColor: Colors.white10,
+                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLiveTelemetryGrid({
+    required int peakHr,
+    required int avgHr,
+    required double caloriesBurnt,
+    required double kcalPerMin,
+    required int elapsedSec,
+    required bool isStrength,
+    required double accumVolume,
+  }) {
+    final bool hasHr = _currentHr > 0 || avgHr > 0;
+    final String currentZone = _currentHr > 0 ? _calculateZone(_currentHr) : '';
+    final Color zoneColor = _currentHr > 0 ? CalorieCalculator.getZoneColor(currentZone) : Colors.grey;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Column 1: Heart Rate & Calories
+        Expanded(
+          child: Column(
+            children: [
+              _buildLiveMetricTile(
+                title: 'HEART RATE',
+                icon: Icons.favorite,
+                iconColor: hasHr ? Colors.redAccent : Colors.grey,
+                mainValue: hasHr ? '$_currentHr BPM' : '-- BPM',
+                subValue: currentZone.isNotEmpty ? currentZone : 'No Monitor',
+                subValueColor: zoneColor,
+                detailText: hasHr ? 'Peak: $peakHr • Avg: $avgHr BPM' : 'Connect HR Monitor',
+              ),
+              const SizedBox(height: 12),
+              _buildLiveMetricTile(
+                title: 'ENERGY BURNED',
+                icon: Icons.local_fire_department,
+                iconColor: Colors.orangeAccent,
+                mainValue: '${caloriesBurnt.toStringAsFixed(0)} kcal',
+                subValue: kcalPerMin > 0 ? '${kcalPerMin.toStringAsFixed(1)} kcal/min' : 'Active Calorie Burn',
+                subValueColor: Colors.orangeAccent,
+                detailText: 'Based on biometric profile',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Column 2: Work/Rest Breakdown & Volume/Reps
+        Expanded(
+          child: Column(
+            children: [
+              _buildLiveMetricTile(
+                title: 'WORK / REST SPLIT',
+                icon: Icons.pie_chart_outline,
+                iconColor: Theme.of(context).colorScheme.primary,
+                mainValue: 'Work: ${_formatDuration(_workDuration)}',
+                subValue: 'Rest: ${_restDuration == 0 ? 'None' : _formatDuration(_restDuration)}',
+                subValueColor: Theme.of(context).colorScheme.secondary,
+                detailText: _autoRegulationEnabled ? 'Auto-Regulated (< $_maxPreworkHr BPM)' : 'Fixed Interval EMOM',
+              ),
+              const SizedBox(height: 12),
+              _buildLiveMetricTile(
+                title: isStrength ? 'VOLUME & LOAD' : (_ruckWeight > 0 ? 'RUCK WEIGHT' : 'TARGET REPS'),
+                icon: Icons.fitness_center,
+                iconColor: const Color(0xFF00E5FF),
+                mainValue: isStrength
+                    ? '${_weightMoved.toStringAsFixed(1)} $_weightUnit'
+                    : (_ruckWeight > 0 ? '${_ruckWeight.toStringAsFixed(1)} $_ruckWeightUnit' : '$_repsPerRound reps/rnd'),
+                subValue: isStrength
+                    ? 'Total Vol: ${accumVolume.toStringAsFixed(0)} $_weightUnit'
+                    : (_ruckWeight > 0 ? '$_repsPerRound reps per round' : 'Target: ${_totalRounds * _repsPerRound} reps'),
+                subValueColor: const Color(0xFF00E5FF),
+                detailText: 'Activity: $_activityType',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLiveMetricTile({
+    required String title,
+    required IconData icon,
+    required Color iconColor,
+    required String mainValue,
+    required String subValue,
+    required Color subValueColor,
+    required String detailText,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: iconColor),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.1,
+                  color: Colors.grey.shade400,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            mainValue,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subValue,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: subValueColor,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Divider(height: 1, color: Colors.white10),
+          const SizedBox(height: 6),
+          Text(
+            detailText,
+            style: const TextStyle(
+              fontSize: 10,
+              color: Colors.grey,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isIdle = _currentEvent.state == WorkoutState.IDLE || _currentEvent.state == WorkoutState.FINISHED;
@@ -1153,25 +1645,29 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Left Pane: Timer Circle, Live HR, and Inline Action Buttons
+                  // Left Pane: High-Visibility Timer Circle, Action Buttons, and Live HR Display
                   Expanded(
-                    flex: 5,
+                    flex: 6,
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final availableHeight = constraints.maxHeight;
-                        final timerSize = (availableHeight * 0.52).clamp(150.0, 360.0);
+                        final availableWidth = constraints.maxWidth;
+                        // Dynamically scale timer size up to 520px while fitting the available pane bounds
+                        final timerSize = (availableHeight * 0.58)
+                            .clamp(240.0, 520.0)
+                            .clamp(0.0, availableWidth * 0.85);
 
                         return Center(
                           child: SingleChildScrollView(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 _buildTimerDisplay(customSize: timerSize),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 20),
                                 _buildInlineControls(isIdle, showTreadmillStop),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 16),
                                 _buildLiveHeartRateDisplay(),
                               ],
                             ),
@@ -1186,30 +1682,30 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     thickness: 1,
                     color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.15),
                   ),
-                  // Right Pane: Loaded Template, HR Recovery, Treadmill Telemetry & Workout Details
+                  // Right Pane: Telemetry Dashboard during workout, or Template/Summary during Idle
                   Expanded(
                     flex: 6,
                     child: Center(
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 700),
+                        constraints: const BoxConstraints(maxWidth: 750),
                         child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              if (_loadedTemplateName != null) ...[
-                                Center(child: _buildLoadedTemplateBadge(isIdle)!),
-                                const SizedBox(height: 12),
-                              ],
-                              _buildRecoveryTrackingBanner(),
-                              const SizedBox(height: 8),
-                              _buildLiveTreadmillTelemetry(),
-                              if (isIdle) ...[
-                                const SizedBox(height: 8),
-                                _buildWorkoutSummaryCard(),
-                              ],
-                            ],
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          child: isIdle
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    if (_loadedTemplateName != null) ...[
+                                      Center(child: _buildLoadedTemplateBadge(isIdle)!),
+                                      const SizedBox(height: 12),
+                                    ],
+                                    _buildRecoveryTrackingBanner(),
+                                    const SizedBox(height: 8),
+                                    _buildLiveTreadmillTelemetry(),
+                                    const SizedBox(height: 8),
+                                    _buildWorkoutSummaryCard(),
+                                  ],
+                                )
+                              : _buildLiveWorkoutDashboard(),
                         ),
                       ),
                     ),
