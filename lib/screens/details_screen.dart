@@ -26,6 +26,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
   final Map<int, List<Map<String, dynamic>>> _hrLogs = {};
   int _maxHr = 180;
   String _distanceUnitPref = 'km';
+  bool? _showCardsView;
 
   List<Color> get _nordColors => AppColors.chartColors;
 
@@ -263,6 +264,282 @@ class _DetailsScreenState extends State<DetailsScreen> {
       // Trigger background sync to upload the update
       SyncService.instance.signInAndSync();
     }
+  }
+
+  Widget _buildWorkoutCards() {
+    if (_workouts.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(24.0),
+        child: Center(child: Text('No workouts recorded for this day.')),
+      );
+    }
+
+    final bool isMetric = _distanceUnitPref == 'km';
+    final String distUnit = isMetric ? 'km' : 'mi';
+    final String speedUnit = isMetric ? 'km/h' : 'mph';
+
+    return Column(
+      children: _workouts.asMap().entries.map((e) {
+        final int idx = e.key;
+        final w = e.value;
+        final Color wColor = _nordColors[idx % _nordColors.length];
+
+        String startStr = '--';
+        try {
+          final dt = DateTime.parse(w['start_time'] as String).toLocal();
+          final period = dt.hour >= 12 ? 'PM' : 'AM';
+          final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+          startStr = '$hour12:${dt.minute.toString().padLeft(2, '0')} $period';
+        } catch (_) {}
+
+        final String name = (w['workout_name'] as String? ?? '').isNotEmpty
+            ? w['workout_name'] as String
+            : 'Workout ${idx + 1}';
+        final String activityType = w['activity_type'] as String? ?? 'HIIT';
+
+        final int rounds = (w['total_rounds_completed'] as num?)?.toInt() ?? 0;
+        final int repsCompleted = (w['reps_completed'] as num?)?.toInt() ?? 0;
+        final double weightMoved = (w['weight_moved'] as num?)?.toDouble() ?? 0.0;
+        final String weightUnit = w['weight_unit'] as String? ?? 'kg';
+        final double totalWeightMoved = (w['total_weight_moved'] as num?)?.toDouble() ?? 0.0;
+        final double ruckWeight = (w['ruck_weight'] as num?)?.toDouble() ?? 0.0;
+        final String ruckWeightUnit = w['ruck_weight_unit'] as String? ?? 'lbs';
+
+        final double rawDist = (w['run_distance'] as num?)?.toDouble() ?? 0.0;
+        final double rawPeak = (w['run_peak_speed'] as num?)?.toDouble() ?? 0.0;
+        final double rawAvg = (w['run_avg_speed'] as num?)?.toDouble() ?? 0.0;
+        final double displayDist = isMetric ? rawDist : rawDist * 0.621371;
+        final double displayPeak = isMetric ? rawPeak : rawPeak * 0.621371;
+        final double displayAvg = isMetric ? rawAvg : rawAvg * 0.621371;
+
+        final hrr1m = w['hrr_1min'] as int?;
+        final hrr2m = w['hrr_2min'] as int?;
+        final recDur = w['recovery_duration_sec'] as int?;
+        final double calories = (w['calories_burnt_kcal'] as num?)?.toDouble() ?? 0.0;
+        final String notes = w['notes'] as String? ?? '';
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: wColor.withValues(alpha: 0.3), width: 1.5),
+          ),
+          color: Theme.of(context).colorScheme.surface,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Card Header
+                Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(color: wColor, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: wColor,
+                            ),
+                          ),
+                          Text(
+                            startStr,
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.06) : AppColors.lightSurfaceSubtle,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        activityType.toUpperCase(),
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    IconButton(
+                      icon: const Icon(Icons.edit_note, size: 20, color: Colors.grey),
+                      tooltip: 'Edit Reps & Notes',
+                      onPressed: () => _editWorkoutNotes(w),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Divider(height: 1, color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : AppColors.lightBorder),
+                const SizedBox(height: 12),
+
+                // 2x2 Key Metric Tiles
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _buildDetailCardStat(
+                        icon: Icons.timer,
+                        iconColor: const Color(0xFF0DF2A3),
+                        label: 'DURATION',
+                        mainValue: _fmtSec(w['total_time_sec']),
+                        subValue: '${_fmtSec(w['work_time_sec'])} work • ${_fmtSec(w['rest_time_sec'])} rest',
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildDetailCardStat(
+                        icon: Icons.repeat,
+                        iconColor: Theme.of(context).colorScheme.primary,
+                        label: 'ROUNDS & REPS',
+                        mainValue: '$rounds rounds',
+                        subValue: repsCompleted > 0 ? '$repsCompleted reps recorded' : 'Rounds finished',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _buildDetailCardStat(
+                        icon: Icons.favorite,
+                        iconColor: const Color(0xFFFF3B30),
+                        label: 'HEART RATE',
+                        mainValue: '${_fmtHr(w['avg_hr'])} avg • ${_fmtHr(w['max_hr'])} max',
+                        subValue: hrr1m != null
+                            ? 'Recovery: -$hrr1m bpm (1m)${hrr2m != null ? ' • -$hrr2m (2m)' : ''}'
+                            : (recDur != null ? 'Rec. tracking: ${recDur}s' : 'No HR recovery data'),
+                        subValueColor: hrr1m != null ? const Color(0xFF00E5FF) : Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildDetailCardStat(
+                        icon: Icons.local_fire_department,
+                        iconColor: const Color(0xFFFF7A00),
+                        label: 'ENERGY & VOLUME',
+                        mainValue: calories > 0 ? '${calories.toStringAsFixed(0)} kcal' : '-- kcal',
+                        subValue: weightMoved > 0
+                            ? '${weightMoved.toStringAsFixed(1)} $weightUnit (${totalWeightMoved.toStringAsFixed(0)} $weightUnit total)'
+                            : (ruckWeight > 0
+                                ? '${ruckWeight.toStringAsFixed(1)} $ruckWeightUnit ruck'
+                                : (rawDist > 0 ? '${displayDist.toStringAsFixed(2)} $distUnit @ ${displayAvg.toStringAsFixed(1)} $speedUnit (peak: ${displayPeak.toStringAsFixed(1)})' : 'General conditioning')),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Notes display if not empty
+                if (notes.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  InkWell(
+                    onTap: () => _editWorkoutNotes(w),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.03) : AppColors.lightSurfaceSubtle,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : AppColors.lightBorder),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.sticky_note_2_outlined, size: 14, color: Colors.amber),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              notes,
+                              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const Icon(Icons.edit, size: 12, color: Colors.grey),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDetailCardStat({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String mainValue,
+    required String subValue,
+    Color? subValueColor,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.03) : AppColors.lightSurfaceSubtle,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? Colors.white10 : AppColors.lightBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: iconColor),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                    color: Colors.grey,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            mainValue,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subValue,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: subValueColor ?? Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildDataTable() {
@@ -532,7 +809,10 @@ class _DetailsScreenState extends State<DetailsScreen> {
             show: true,
             drawVerticalLine: false,
             horizontalInterval: 20,
-            getDrawingHorizontalLine: (value) => FlLine(color: Colors.white10, strokeWidth: 1),
+            getDrawingHorizontalLine: (value) => FlLine(
+              color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : AppColors.lightBorder,
+              strokeWidth: 1,
+            ),
           ),
           titlesData: FlTitlesData(
             show: true,
@@ -564,6 +844,10 @@ class _DetailsScreenState extends State<DetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isNarrow = screenWidth < 720;
+    final bool useCards = _showCardsView ?? isNarrow;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Details: ${widget.dateStr}'),
@@ -584,13 +868,54 @@ class _DetailsScreenState extends State<DetailsScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  Card(
-                    color: Theme.of(context).colorScheme.surface,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: _buildDataTable(),
+                  // View mode switcher header
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0, left: 4, right: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'WORKOUTS RECORDED (${_workouts.length})',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        SegmentedButton<bool>(
+                          segments: const [
+                            ButtonSegment(
+                              value: true,
+                              icon: Icon(Icons.view_agenda_outlined, size: 15),
+                              label: Text('Cards', style: TextStyle(fontSize: 12)),
+                            ),
+                            ButtonSegment(
+                              value: false,
+                              icon: Icon(Icons.table_chart_outlined, size: 15),
+                              label: Text('Table', style: TextStyle(fontSize: 12)),
+                            ),
+                          ],
+                          selected: {useCards},
+                          onSelectionChanged: (set) => setState(() => _showCardsView = set.first),
+                          style: const ButtonStyle(
+                            visualDensity: VisualDensity.compact,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  if (useCards)
+                    _buildWorkoutCards()
+                  else
+                    Card(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: _buildDataTable(),
+                      ),
+                    ),
                   const SizedBox(height: 24),
                   const Text('Cumulative Daily Heart Rate Intensity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),

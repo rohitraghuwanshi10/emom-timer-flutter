@@ -66,13 +66,13 @@ class ProfileSelectorCapsule extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: isEnabled ? Colors.white : Colors.grey,
+                  color: isEnabled ? Theme.of(context).colorScheme.onSurface : Colors.grey,
                 ),
               ),
               Icon(
                 Icons.arrow_drop_down,
                 size: 14,
-                color: isEnabled ? Colors.white : Colors.grey,
+                color: isEnabled ? Theme.of(context).colorScheme.onSurface : Colors.grey,
               ),
             ],
           ),

@@ -12,7 +12,8 @@ import 'services/bluetooth_service.dart';
 import 'services/treadmill_service.dart';
 import 'services/hrr_service.dart';
 import 'firebase_options.dart';
-import 'theme/app_colors.dart';
+import 'theme/app_theme.dart';
+import 'services/theme_service.dart';
 import 'widgets/bluetooth_device_modal.dart';
 import 'utils/responsive_utils.dart';
 import 'dart:async';
@@ -20,6 +21,7 @@ import 'dart:async';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HrrService.instance.init();
+  await ThemeService.instance.loadThemeForProfile();
   
   // Silence verbose Bluetooth logs (e.g. FBP-iOS didUpdateValueForCharacteristic)
   FlutterBluePlus.setLogLevel(LogLevel.none, color: false);
@@ -42,34 +44,17 @@ class EmomTimerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ChronoPulse Active',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: AppColors.deepBg,
-        primaryColor: AppColors.mintNeon,
-        colorScheme: const ColorScheme.dark(
-          primary: AppColors.mintNeon,
-          secondary: AppColors.orangeNeon,
-          surface: AppColors.deepSurface,
-          error: AppColors.redNeon,
-          onPrimary: AppColors.deepBg,
-          onSecondary: AppColors.deepBg,
-          onSurface: AppColors.textPrimary,
-          onError: AppColors.textPrimary,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppColors.deepSurface,
-          elevation: 0,
-          titleTextStyle: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        bottomNavigationBarTheme: BottomNavigationBarThemeData(
-          backgroundColor: AppColors.deepSurface,
-          selectedItemColor: AppColors.mintNeon,
-          unselectedItemColor: AppColors.textSecondary.withValues(alpha: 0.6),
-        ),
-      ),
-      home: const MainNavigationScreen(),
+    return ListenableBuilder(
+      listenable: ThemeService.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'ChronoPulse Active',
+          themeMode: ThemeService.instance.themeMode,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          home: const MainNavigationScreen(),
+        );
+      },
     );
   }
 }
@@ -158,6 +143,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Future<void> _switchProfile(String name) async {
     await DatabaseHelper.instance.setActiveProfileName(name);
+    await ThemeService.instance.loadThemeForProfile(name);
     await _loadProfileData();
     // Notify all active screen controllers to reload
     _timerKey.currentState?.loadProfileSettings();

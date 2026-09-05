@@ -112,7 +112,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 19,
+        version: 20,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -358,6 +358,13 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for version 19: $e');
             }
           }
+          if (oldVersion < 20) {
+            try {
+              await db.execute("ALTER TABLE profiles ADD COLUMN theme_mode TEXT DEFAULT 'dark'");
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 20: $e');
+            }
+          }
         },
       ),
     );
@@ -382,6 +389,7 @@ class DatabaseHelper {
           treadmill_preset_1 REAL DEFAULT 2.0,
           treadmill_preset_2 REAL DEFAULT 4.0,
           treadmill_preset_3 REAL DEFAULT 6.0,
+          theme_mode TEXT DEFAULT 'dark',
           updated_at TEXT
       )
     ''');

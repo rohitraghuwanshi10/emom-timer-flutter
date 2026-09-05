@@ -128,6 +128,7 @@ class SyncService extends ChangeNotifier {
               'treadmill_preset_1': local['treadmill_preset_1'] ?? 2.0,
               'treadmill_preset_2': local['treadmill_preset_2'] ?? 4.0,
               'treadmill_preset_3': local['treadmill_preset_3'] ?? 6.0,
+              'theme_mode': local['theme_mode'] ?? 'dark',
               'updated_at': freshTimestamp,
             }, SetOptions(merge: true));
             debugPrint('SyncService: Healed and synced null timestamps for profile $name.');
@@ -169,6 +170,9 @@ class SyncService extends ChangeNotifier {
           if (remoteData.containsKey('treadmill_preset_3')) {
             updateData['treadmill_preset_3'] = remoteData['treadmill_preset_3'] ?? 6.0;
           }
+          if (remoteData.containsKey('theme_mode')) {
+            updateData['theme_mode'] = remoteData['theme_mode'] ?? 'dark';
+          }
           await db.update('profiles', updateData, where: 'name = ?', whereArgs: [name]);
           debugPrint('SyncService: Downloaded newer profile $name from Firestore.');
         } else {
@@ -189,6 +193,7 @@ class SyncService extends ChangeNotifier {
             'treadmill_preset_1': local['treadmill_preset_1'] ?? 2.0,
             'treadmill_preset_2': local['treadmill_preset_2'] ?? 4.0,
             'treadmill_preset_3': local['treadmill_preset_3'] ?? 6.0,
+            'theme_mode': local['theme_mode'] ?? 'dark',
             'updated_at': localUpdatedAtStr,
           }, SetOptions(merge: true));
           debugPrint('SyncService: Uploaded newer profile $name to Firestore.');
@@ -211,6 +216,7 @@ class SyncService extends ChangeNotifier {
           'treadmill_preset_1': local['treadmill_preset_1'] ?? 2.0,
           'treadmill_preset_2': local['treadmill_preset_2'] ?? 4.0,
           'treadmill_preset_3': local['treadmill_preset_3'] ?? 6.0,
+          'theme_mode': local['theme_mode'] ?? 'dark',
           'updated_at': localUpdatedAtStr ?? DateTime.now().toIso8601String(),
         }, SetOptions(merge: true));
         debugPrint('SyncService: Uploaded new profile $name to Firestore.');
@@ -238,6 +244,7 @@ class SyncService extends ChangeNotifier {
           'treadmill_preset_1': data['treadmill_preset_1'] ?? 2.0,
           'treadmill_preset_2': data['treadmill_preset_2'] ?? 4.0,
           'treadmill_preset_3': data['treadmill_preset_3'] ?? 6.0,
+          'theme_mode': data['theme_mode'] ?? 'dark',
           'updated_at': data['updated_at'],
         });
         debugPrint('SyncService: Downloaded remote-only profile $name');

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/database_helper.dart';
 import '../services/sync_service.dart';
 import '../services/health_service.dart';
+import '../services/theme_service.dart';
+import '../theme/app_colors.dart';
 import '../widgets/profile_selector_capsule.dart';
 import '../utils/responsive_utils.dart';
 
@@ -17,6 +19,7 @@ class ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   String _profileName = 'Default';
   List<String> _availableProfiles = [];
+  String _themeMode = 'dark';
   int _maxPreworkHr = 130;
   int _maxHr = 180;
   double _weightKg = 70.0;
@@ -102,12 +105,20 @@ class ProfileScreenState extends State<ProfileScreen> {
           _preset2 = (profile['treadmill_preset_2'] as num?)?.toDouble() ?? 4.0;
           _preset3 = (profile['treadmill_preset_3'] as num?)?.toDouble() ?? 6.0;
           _distanceUnitPref = profile['distance_unit_pref'] as String? ?? 'km';
+          _themeMode = profile['theme_mode'] as String? ?? 'dark';
         });
       }
     } catch (e) {
       debugPrint('Error loading profile: $e');
     }
     setState(() => _isLoading = false);
+  }
+
+  void _onThemeChanged(String modeStr) {
+    setState(() {
+      _themeMode = modeStr;
+    });
+    ThemeService.instance.setThemeModeFromString(modeStr, profileName: _profileName);
   }
 
   Future<void> _saveProfile({bool showFeedback = true}) async {
@@ -129,6 +140,7 @@ class ProfileScreenState extends State<ProfileScreen> {
           'treadmill_preset_2': _preset2,
           'treadmill_preset_3': _preset3,
           'distance_unit_pref': _distanceUnitPref,
+          'theme_mode': _themeMode,
           'updated_at': DateTime.now().toIso8601String(),
         },
         where: 'name = ?',
@@ -314,6 +326,78 @@ class ProfileScreenState extends State<ProfileScreen> {
                 ),
                 Text('$_maxHr', style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
+            ),
+            const SizedBox(height: 32),
+            const Text('Appearance', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.dark 
+                      ? Colors.white12 
+                      : AppColors.lightBorder,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        _themeMode == 'light'
+                            ? Icons.light_mode
+                            : (_themeMode == 'system' ? Icons.brightness_auto : Icons.dark_mode),
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Theme Mode',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _themeMode == 'light' ? 'Light' : (_themeMode == 'system' ? 'System' : 'Dark'),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment<String>(
+                          value: 'dark',
+                          icon: Icon(Icons.dark_mode, size: 16),
+                          label: Text('Dark'),
+                        ),
+                        ButtonSegment<String>(
+                          value: 'light',
+                          icon: Icon(Icons.light_mode, size: 16),
+                          label: Text('Light'),
+                        ),
+                        ButtonSegment<String>(
+                          value: 'system',
+                          icon: Icon(Icons.brightness_auto, size: 16),
+                          label: Text('System'),
+                        ),
+                      ],
+                      selected: {_themeMode},
+                      onSelectionChanged: (Set<String> newSelection) {
+                        _onThemeChanged(newSelection.first);
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 32),
             const Text('General', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
