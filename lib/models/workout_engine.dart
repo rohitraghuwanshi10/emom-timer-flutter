@@ -94,6 +94,15 @@ class WorkoutEngine {
     _broadcast();
   }
 
+  void skip() {
+    if (_state == WorkoutState.FINISHED || _state == WorkoutState.IDLE) return;
+    if (_state == WorkoutState.PAUSED) {
+      _state = _prevState ?? WorkoutState.WORK;
+      _prevState = null;
+    }
+    _handleTransition();
+  }
+
   void _tick() {
     if (_state == WorkoutState.FINISHED || _state == WorkoutState.PAUSED) return;
 

@@ -21,6 +21,8 @@ import '../widgets/recovery_tracking_banner.dart';
 import '../widgets/live_heart_rate_display.dart';
 import '../widgets/bluetooth_device_modal.dart';
 import '../widgets/customize_workout_sheet.dart';
+import '../widgets/heart_rate_zone_spectrum.dart';
+import '../widgets/interval_roadmap_card.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/app_colors.dart';
 
@@ -1324,8 +1326,17 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         ),
         SizedBox(height: isCompact ? 10 : 14),
 
-        // 2. Segmented Round Tracker
-        _buildLiveRoundTracker(isCompact: isCompact),
+        // 2. Active Interval Roadmap & Segmented Round Tracker
+        IntervalRoadmapCard(
+          currentEvent: _currentEvent,
+          totalRounds: _totalRounds,
+          workDuration: _workDuration,
+          restDuration: _restDuration,
+          continuousMode: _continuousMode,
+          workTimeSec: _engine?.workTimeSec ?? 0,
+          restTimeSec: _engine?.restTimeSec ?? 0,
+          isCompact: isCompact,
+        ),
         SizedBox(height: isCompact ? 10 : 14),
 
         // 3. Live Telemetry 2x2 Grid
@@ -1339,51 +1350,136 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           accumVolume: accumVolume,
           isCompact: isCompact,
         ),
+        SizedBox(height: isCompact ? 10 : 14),
 
-        // 4. Live Treadmill Telemetry (if connected)
+        // 4. Live 5-Zone Heart Rate Spectrum & Distribution
+        HeartRateZoneSpectrum(
+          currentHr: _currentHr,
+          maxHr: _maxHr,
+          hrDetails: _hrDetails,
+          isCompact: isCompact,
+        ),
+
+        // 5. Live Treadmill Telemetry (if connected)
         if (isTreadmill) ...[
           SizedBox(height: isCompact ? 10 : 14),
           _buildLiveTreadmillTelemetry(),
         ],
 
-        // 5. Notes / Cues (if available)
-        if (_notesController.text.isNotEmpty) ...[
-          SizedBox(height: isCompact ? 10 : 14),
+        // 6. Workout Cues & Form Guidance Panel
+        SizedBox(height: isCompact ? 10 : 14),
+        _buildCoachingCard(isCompact: isCompact),
+      ],
+    );
+  }
+
+  Widget _buildCoachingCard({bool isCompact = false}) {
+    final hasNotes = _notesController.text.trim().isNotEmpty;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    String coachingTips;
+    final activity = ActivityType.fromString(_activityType);
+    if (activity.isStrengthBased) {
+      coachingTips = 'Control the eccentric tempo • Brace core • Full range of motion';
+    } else if (activity.name.toLowerCase().contains('hiit')) {
+      coachingTips = 'Pace early rounds • Deep diaphragmatic recovery • Consistent cadence';
+    } else {
+      coachingTips = 'Maintain steady breathing • Smooth transitions • Keep solid form';
+    }
+
+    return Container(
+      padding: EdgeInsets.all(isCompact ? 12 : 16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.amber.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Container(
-            padding: EdgeInsets.all(isCompact ? 10 : 14),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : AppColors.lightBorder,
-              ),
+              color: Colors.amber.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
             ),
-            child: Row(
+            child: const Icon(Icons.tips_and_updates_outlined, size: 16, color: Colors.amber),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.tips_and_updates_outlined, size: 16, color: Colors.amber),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'WORKOUT CUES & NOTES',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.amber),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'WORKOUT CUES & NOTES',
+                      style: TextStyle(
+                        fontSize: isCompact ? 10 : 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                        color: Colors.amber,
                       ),
-                      const SizedBox(height: 4),
+                    ),
+                    if (hasNotes && _loadedTemplateName != null)
                       Text(
-                        _notesController.text,
-                        style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.3),
+                        _loadedTemplateName!,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  hasNotes ? _notesController.text : coachingTips,
+                  style: TextStyle(
+                    fontSize: isCompact ? 12 : 13,
+                    color: Theme.of(context).colorScheme.onSurface,
+                    height: 1.35,
+                    fontWeight: hasNotes ? FontWeight.w500 : FontWeight.w400,
+                  ),
+                ),
+                if (hasNotes && coachingTips.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Divider(
+                    height: 1,
+                    color: isDark ? Colors.white10 : AppColors.lightBorder,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.fitness_center,
+                        size: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          coachingTips,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
-                ),
+                ],
               ],
             ),
           ),
         ],
-      ],
+      ),
     );
   }
 
@@ -1976,30 +2072,30 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                 children: [
                   // Left Pane: High-Visibility Timer Circle, Action Buttons, and Live HR Display
                   Expanded(
-                    flex: hideAppBar ? 5 : 6,
+                    flex: hideAppBar ? 5 : 5,
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final availableHeight = constraints.maxHeight;
                         final availableWidth = constraints.maxWidth;
-                        // Dynamically scale timer size up to 520px while fitting the available pane bounds
-                        final timerSize = (availableHeight * (isPhoneLandscape ? 0.50 : 0.58))
-                            .clamp(isPhoneLandscape ? 120.0 : 240.0, isPhoneLandscape ? 175.0 : 520.0)
-                            .clamp(0.0, availableWidth * 0.85);
+                        // Dynamically scale timer size up to 500px while fitting the available pane bounds
+                        final timerSize = (availableHeight * (isPhoneLandscape ? 0.50 : 0.55))
+                            .clamp(isPhoneLandscape ? 120.0 : 240.0, isPhoneLandscape ? 175.0 : 500.0)
+                            .clamp(0.0, availableWidth * 0.82);
 
                         return Center(
                           child: SingleChildScrollView(
                             padding: EdgeInsets.symmetric(
-                              vertical: isPhoneLandscape ? 6 : 16,
-                              horizontal: isPhoneLandscape ? 10 : 20,
+                              vertical: isPhoneLandscape ? 6 : 20,
+                              horizontal: isPhoneLandscape ? 10 : 24,
                             ),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 _buildTimerDisplay(customSize: timerSize),
-                                SizedBox(height: isPhoneLandscape ? 10 : 20),
+                                SizedBox(height: isPhoneLandscape ? 10 : 22),
                                 _buildInlineControls(isIdle, showTreadmillStop),
-                                SizedBox(height: isPhoneLandscape ? 8 : 16),
+                                SizedBox(height: isPhoneLandscape ? 8 : 18),
                                 _buildLiveHeartRateDisplay(isCompact: isPhoneLandscape),
                               ],
                             ),
@@ -2016,14 +2112,14 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                   ),
                   // Right Pane: Telemetry Dashboard during workout, or Template/Summary during Idle
                   Expanded(
-                    flex: hideAppBar ? 7 : 6,
+                    flex: hideAppBar ? 7 : 7,
                     child: Center(
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 750),
+                        constraints: BoxConstraints(maxWidth: isPhoneLandscape ? 700 : 860),
                         child: SingleChildScrollView(
                           padding: EdgeInsets.symmetric(
-                            horizontal: hideAppBar ? 12 : 20,
-                            vertical: hideAppBar ? 8 : 16,
+                            horizontal: hideAppBar ? 12 : 24,
+                            vertical: hideAppBar ? 8 : 18,
                           ),
                           child: isIdle
                               ? Column(
@@ -2130,8 +2226,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
-          // If editing a text field, let space behave normally
+        if (event is KeyDownEvent) {
+          // If editing a text field, let space and letters behave normally
           final primaryFocus = FocusManager.instance.primaryFocus;
           if (primaryFocus != null && primaryFocus.context != null) {
             final w = primaryFocus.context!.widget;
@@ -2139,12 +2235,24 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               return KeyEventResult.ignored;
             }
           }
-          if (isIdle) {
-            _startWorkout();
-          } else {
-            _engine?.pause();
+          if (event.logicalKey == LogicalKeyboardKey.space) {
+            if (isIdle) {
+              _startWorkout();
+            } else {
+              _engine?.pause();
+            }
+            return KeyEventResult.handled;
+          } else if (event.logicalKey == LogicalKeyboardKey.keyS) {
+            if (!isIdle) {
+              _engine?.skip();
+              return KeyEventResult.handled;
+            }
+          } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+            if (!isIdle) {
+              _stopWorkout();
+              return KeyEventResult.handled;
+            }
           }
-          return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
       },
@@ -2156,64 +2264,172 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     final bool isPhoneLandscape = context.isPhoneLandscape;
     final bool isWideDesktop = context.useWideLayout && !isPhoneLandscape;
     if (isIdle) {
-      return ElevatedButton.icon(
+      return ElevatedButton(
         onPressed: _startWorkout,
         style: ElevatedButton.styleFrom(
           backgroundColor: Theme.of(context).colorScheme.secondary,
           foregroundColor: Theme.of(context).colorScheme.onSecondary,
           padding: EdgeInsets.symmetric(
-            horizontal: isPhoneLandscape ? 16 : (isWideDesktop ? 32 : 20),
-            vertical: isPhoneLandscape ? 8 : (isWideDesktop ? 16 : 12),
+            horizontal: isPhoneLandscape ? 14 : (isWideDesktop ? 24 : 18),
+            vertical: isPhoneLandscape ? 8 : (isWideDesktop ? 14 : 10),
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
+          elevation: isWideDesktop ? 4 : 2,
         ),
-        icon: Icon(Icons.play_arrow, size: isPhoneLandscape ? 16 : (isWideDesktop ? 22 : 18)),
-        label: Text(
-          'Start',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: isPhoneLandscape ? 12 : (isWideDesktop ? 15 : 14),
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.play_arrow, size: isPhoneLandscape ? 16 : (isWideDesktop ? 22 : 18)),
+            const SizedBox(width: 6),
+            Text(
+              'Start Workout',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: isPhoneLandscape ? 12 : (isWideDesktop ? 15 : 13),
+                letterSpacing: 0.5,
+              ),
+            ),
+            if (isWideDesktop) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'Space',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ],
         ),
       );
     }
 
+    final bool isPaused = _currentEvent.state == WorkoutState.PAUSED;
+
     return Wrap(
-      spacing: isPhoneLandscape ? 6 : (isWideDesktop ? 12 : 8),
+      spacing: isPhoneLandscape ? 6 : (isWideDesktop ? 10 : 8),
       runSpacing: isPhoneLandscape ? 4 : 8,
       alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        ElevatedButton.icon(
+        // 1. Pause / Resume button
+        ElevatedButton(
           onPressed: () => _engine?.pause(),
           style: ElevatedButton.styleFrom(
-            backgroundColor: _currentEvent.state == WorkoutState.PAUSED 
+            backgroundColor: isPaused 
                 ? Theme.of(context).colorScheme.secondary 
                 : Colors.orange,
             foregroundColor: Colors.white,
             padding: EdgeInsets.symmetric(
-              horizontal: isPhoneLandscape ? 10 : (isWideDesktop ? 20 : 12),
-              vertical: isPhoneLandscape ? 6 : (isWideDesktop ? 14 : 8),
+              horizontal: isPhoneLandscape ? 8 : (isWideDesktop ? 16 : 12),
+              vertical: isPhoneLandscape ? 6 : (isWideDesktop ? 12 : 9),
             ),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(isWideDesktop ? 12 : 8),
             ),
+            elevation: isWideDesktop ? 3 : 1,
           ),
-          icon: Icon(
-            _currentEvent.state == WorkoutState.PAUSED ? Icons.play_arrow : Icons.pause,
-            size: isPhoneLandscape ? 14 : (isWideDesktop ? 18 : 14),
-          ),
-          label: Text(
-            _currentEvent.state == WorkoutState.PAUSED ? 'Resume' : 'Pause',
-            style: TextStyle(
-              fontSize: isPhoneLandscape ? 11 : (isWideDesktop ? 13 : 11),
-              fontWeight: FontWeight.bold,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isPaused ? Icons.play_arrow : Icons.pause,
+                size: isPhoneLandscape ? 14 : (isWideDesktop ? 18 : 16),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                isPaused ? 'Resume' : 'Pause',
+                style: TextStyle(
+                  fontSize: isPhoneLandscape ? 11 : (isWideDesktop ? 13 : 12),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (isWideDesktop) ...[
+                const SizedBox(width: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Space',
+                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
+
+        // 2. Skip Phase button
+        ElevatedButton(
+          onPressed: () => _engine?.skip(),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            foregroundColor: Theme.of(context).colorScheme.primary,
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+              width: 1.5,
+            ),
+            padding: EdgeInsets.symmetric(
+              horizontal: isPhoneLandscape ? 8 : (isWideDesktop ? 14 : 10),
+              vertical: isPhoneLandscape ? 6 : (isWideDesktop ? 12 : 9),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(isWideDesktop ? 12 : 8),
+            ),
+            elevation: isWideDesktop ? 2 : 1,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.skip_next,
+                size: isPhoneLandscape ? 14 : (isWideDesktop ? 18 : 16),
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Skip',
+                style: TextStyle(
+                  fontSize: isPhoneLandscape ? 11 : (isWideDesktop ? 13 : 12),
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              if (isWideDesktop) ...[
+                const SizedBox(width: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'S',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        // 3. Stop Treadmill (if applicable)
         if (showTreadmillStop)
-          ElevatedButton.icon(
+          ElevatedButton(
             onPressed: () {
               TreadmillBluetoothService.instance.stop();
               _engine?.pause();
@@ -2222,47 +2438,76 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
               padding: EdgeInsets.symmetric(
-                horizontal: isPhoneLandscape ? 8 : (isWideDesktop ? 16 : 10),
-                vertical: isPhoneLandscape ? 6 : (isWideDesktop ? 14 : 8),
+                horizontal: isPhoneLandscape ? 8 : (isWideDesktop ? 12 : 9),
+                vertical: isPhoneLandscape ? 6 : (isWideDesktop ? 12 : 9),
               ),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(isWideDesktop ? 12 : 8),
               ),
             ),
-            icon: Icon(
-              Icons.pan_tool,
-              size: isPhoneLandscape ? 12 : (isWideDesktop ? 16 : 12),
-              color: Colors.white,
-            ),
-            label: Text(
-              'STOP TM',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: isPhoneLandscape ? 10 : (isWideDesktop ? 13 : 11),
-                fontWeight: FontWeight.bold,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.pan_tool,
+                  size: isPhoneLandscape ? 12 : (isWideDesktop ? 16 : 12),
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'STOP TM',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: isPhoneLandscape ? 10 : (isWideDesktop ? 12 : 11),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ),
-        ElevatedButton.icon(
+
+        // 4. End Workout button
+        ElevatedButton(
           onPressed: _stopWorkout,
           style: ElevatedButton.styleFrom(
             backgroundColor: Theme.of(context).colorScheme.error,
             foregroundColor: Colors.white,
             padding: EdgeInsets.symmetric(
-              horizontal: isPhoneLandscape ? 10 : (isWideDesktop ? 20 : 12),
-              vertical: isPhoneLandscape ? 6 : (isWideDesktop ? 14 : 8),
+              horizontal: isPhoneLandscape ? 8 : (isWideDesktop ? 16 : 10),
+              vertical: isPhoneLandscape ? 6 : (isWideDesktop ? 12 : 9),
             ),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(isWideDesktop ? 12 : 8),
             ),
+            elevation: isWideDesktop ? 3 : 1,
           ),
-          icon: Icon(Icons.stop, size: isPhoneLandscape ? 14 : (isWideDesktop ? 18 : 14)),
-          label: Text(
-            'End',
-            style: TextStyle(
-              fontSize: isPhoneLandscape ? 11 : (isWideDesktop ? 13 : 11),
-              fontWeight: FontWeight.bold,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.stop, size: isPhoneLandscape ? 14 : (isWideDesktop ? 18 : 16)),
+              const SizedBox(width: 4),
+              Text(
+                'End',
+                style: TextStyle(
+                  fontSize: isPhoneLandscape ? 11 : (isWideDesktop ? 13 : 12),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (isWideDesktop) ...[
+                const SizedBox(width: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Esc',
+                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ],
