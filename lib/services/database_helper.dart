@@ -112,7 +112,7 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 20,
+        version: 21,
         onConfigure: (db) async {
           try {
             await db.execute('PRAGMA journal_mode=DELETE');
@@ -365,6 +365,23 @@ class DatabaseHelper {
               debugPrint('DatabaseHelper: migration warning for version 20: $e');
             }
           }
+          if (oldVersion < 21) {
+            try {
+              await db.execute('ALTER TABLE profiles ADD COLUMN music_volume REAL DEFAULT 0.7');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 21 music_volume: $e');
+            }
+            try {
+              await db.execute('ALTER TABLE profiles ADD COLUMN music_muted INTEGER DEFAULT 0');
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 21 music_muted: $e');
+            }
+            try {
+              await db.execute("ALTER TABLE workout_templates ADD COLUMN music_mode TEXT DEFAULT 'AUTO'");
+            } catch (e) {
+              debugPrint('DatabaseHelper: migration warning for version 21 music_mode: $e');
+            }
+          }
         },
       ),
     );
@@ -390,6 +407,8 @@ class DatabaseHelper {
           treadmill_preset_2 REAL DEFAULT 4.0,
           treadmill_preset_3 REAL DEFAULT 6.0,
           theme_mode TEXT DEFAULT 'dark',
+          music_volume REAL DEFAULT 0.7,
+          music_muted INTEGER DEFAULT 0,
           updated_at TEXT
       )
     ''');
@@ -414,6 +433,7 @@ class DatabaseHelper {
           ruck_weight REAL DEFAULT 0.0,
           ruck_weight_unit TEXT DEFAULT 'lbs',
           reps_per_round INTEGER DEFAULT 1,
+          music_mode TEXT DEFAULT 'AUTO',
           FOREIGN KEY(profile_name) REFERENCES profiles(name) ON DELETE CASCADE,
           UNIQUE(profile_name, template_name)
       )

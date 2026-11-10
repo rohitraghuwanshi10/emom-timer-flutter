@@ -74,6 +74,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   Map<String, dynamic>? _loadedTemplate;
   String _activityType = 'HIIT';
   bool _treadmillWorkout = false;
+  String _musicMode = 'AUTO';
+  double _musicVolume = 0.70;
+  bool _musicMuted = false;
+  WorkoutState? _lastSyncedMusicState;
 
   double _weightMoved = 0.0;
   String _weightUnit = 'kg';
@@ -113,6 +117,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         _notesController.text != (_loadedTemplate!['notes'] ?? '') ||
         _continuousMode != ((_loadedTemplate!['continuous_mode'] as int? ?? 0) == 1) ||
         _activityType != (_loadedTemplate!['activity_type'] ?? 'HIIT') ||
+        _musicMode != (_loadedTemplate!['music_mode'] as String? ?? 'AUTO') ||
         autoRegulateModified ||
         treadmillModified ||
         weightModified;
@@ -169,6 +174,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
             _healthEnabled = (profile['health_enabled'] as int? ?? 0) == 1;
             _saveHistoryEnabled = (profile['save_history'] as int? ?? 1) == 1;
             _distanceUnitPref = profile['distance_unit_pref'] as String? ?? 'km';
+            _musicVolume = ((profile['music_volume'] as num?)?.toDouble() ?? 0.70).clamp(0.0, 1.0);
+            _musicMuted = (profile['music_muted'] as int? ?? 0) == 1;
             
             TreadmillBluetoothService.instance.treadmillEnabled = (profile['treadmill_enabled'] as int? ?? 0) == 1;
             final p1 = (profile['treadmill_preset_1'] as num?)?.toDouble() ?? 2.0;
@@ -184,6 +191,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               _autoRegulationEnabled = false;
             }
           });
+          await AudioService.instance.setMusicVolume(_musicVolume);
+          await AudioService.instance.setMusicMuted(_musicMuted);
           
           final autoConnect = profile['auto_connect_hr'] as int? ?? 1;
           if (autoConnect == 1) {
@@ -202,6 +211,67 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     await loadProfileSettings();
   }
 
+  Future<void> _saveMusicPrefsToProfile() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'profiles',
+        {
+          'music_volume': _musicVolume,
+          'music_muted': _musicMuted ? 1 : 0,
+        },
+        where: 'name = ?',
+        whereArgs: [_profileName],
+      );
+    } catch (e) {
+      debugPrint('Error saving music prefs to profile: $e');
+    }
+  }
+
+  void _syncWorkoutMusicForState(WorkoutState state) {
+    AudioService.instance.syncWorkoutMusic(
+      state: state,
+      mode: FocusMusicMode.fromString(_musicMode),
+      activity: ActivityType.fromString(_activityType),
+      isTreadmill: TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout,
+    );
+  }
+
+  void _updateMusicMode(String newModeCode) {
+    setState(() {
+      _musicMode = newModeCode;
+    });
+    final state = _currentEvent.state;
+    if (state != WorkoutState.IDLE && state != WorkoutState.FINISHED) {
+      _syncWorkoutMusicForState(state);
+    } else if (HrrService.instance.state.isTracking) {
+      _syncWorkoutMusicForState(WorkoutState.IDLE);
+    }
+  }
+
+  void _updateMusicVolume(double newVolume) {
+    final clamped = newVolume.clamp(0.0, 1.0);
+    setState(() {
+      _musicVolume = clamped;
+      if (clamped > 0 && _musicMuted) {
+        _musicMuted = false;
+      }
+    });
+    AudioService.instance.setMusicVolume(clamped);
+    if (clamped > 0) {
+      AudioService.instance.setMusicMuted(false);
+    }
+    _saveMusicPrefsToProfile();
+  }
+
+  void _updateMusicMuted(bool muted) {
+    setState(() {
+      _musicMuted = muted;
+    });
+    AudioService.instance.setMusicMuted(muted);
+    _saveMusicPrefsToProfile();
+  }
+
   void loadTemplate(Map<String, dynamic> template) {
     if (mounted) {
       setState(() {
@@ -211,6 +281,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         _notesController.text = template['notes'] as String? ?? '';
         _continuousMode = (template['continuous_mode'] as int? ?? 0) == 1;
         _activityType = template['activity_type'] as String? ?? 'HIIT';
+        _musicMode = template['music_mode'] as String? ?? 'AUTO';
         _loadedTemplateName = template['template_name'] as String?;
         _loadedTemplate = template;
         _autoRegulationEnabled = (template['auto_regulate'] as int? ?? 1) == 1 && _isBluetoothConnected && _maxPreworkHr > 0;
@@ -342,6 +413,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       _recordHrTick(event.state);
 
       if (event.state == WorkoutState.FINISHED) {
+        _lastSyncedMusicState = WorkoutState.FINISHED;
         _saveWorkoutToDb();
         _resetToIdle();
         if (TreadmillBluetoothService.instance.treadmillEnabled &&
@@ -350,6 +422,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
             TreadmillBluetoothService.instance.isConnected) {
           TreadmillBluetoothService.instance.stop();
         }
+      } else if (event.state != _lastSyncedMusicState) {
+        _lastSyncedMusicState = event.state;
+        _syncWorkoutMusicForState(event.state);
       }
 
       // Auto Speed Sync control logic
@@ -438,6 +513,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     _engine?.dispose();
     _engine = null;
     _lastProcessedTreadmillState = null;
+    _lastSyncedMusicState = null;
+    _syncWorkoutMusicForState(WorkoutState.IDLE);
     if (TreadmillBluetoothService.instance.treadmillEnabled &&
         TreadmillBluetoothService.instance.isConnected) {
       TreadmillBluetoothService.instance.stop();
@@ -657,6 +734,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     'notes': _notesController.text,
                     'continuous_mode': _continuousMode ? 1 : 0,
                     'activity_type': _activityType,
+                    'music_mode': _musicMode,
                     'auto_regulate': autoRegulateToSave,
                     'treadmill_workout': _treadmillWorkout ? 1 : 0,
                     'work_speed': TreadmillBluetoothService.instance.workSpeed,
@@ -711,6 +789,163 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
 
 
+
+  Widget _buildFocusMusicControlStrip({bool isCompact = false, bool embedded = false}) {
+    final bool isTreadmill = TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout;
+    final ActivityType activity = ActivityType.fromString(_activityType);
+    final FocusMusicMode selectedMode = FocusMusicMode.fromString(_musicMode);
+    final FocusMusicMode resolvedMode = selectedMode.resolve(
+      activity: activity,
+      isTreadmill: isTreadmill,
+    );
+    final bool isOff = resolvedMode == FocusMusicMode.off;
+    final Color accentColor = isOff ? Colors.grey : resolvedMode.color;
+
+    final Widget content = Row(
+      children: [
+        // Track selector popup pill
+        PopupMenuButton<FocusMusicMode>(
+          tooltip: 'Select Workout Music Track',
+          onSelected: (mode) => _updateMusicMode(mode.code),
+          itemBuilder: (context) => FocusMusicMode.values.map((mode) {
+            final bool isSelected = mode == selectedMode;
+            final String title = mode == FocusMusicMode.auto
+                ? 'Auto (${mode.resolve(activity: activity, isTreadmill: isTreadmill).shortLabel})'
+                : mode.label;
+            return PopupMenuItem<FocusMusicMode>(
+              value: mode,
+              child: Row(
+                children: [
+                  Icon(mode.icon, size: 18, color: mode.color),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                  if (isSelected)
+                    Icon(Icons.check, size: 16, color: Theme.of(context).colorScheme.primary),
+                ],
+              ),
+            );
+          }).toList(),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isCompact ? 8 : 10,
+              vertical: isCompact ? 5 : 6,
+            ),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.35),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  selectedMode.icon,
+                  size: isCompact ? 14 : 15,
+                  color: accentColor,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    selectedMode.pillLabel(activity: activity, isTreadmill: isTreadmill),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: isCompact ? 11.5 : 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: isOff
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : accentColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 16,
+                  color: isOff
+                      ? Theme.of(context).colorScheme.onSurfaceVariant
+                      : accentColor,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (!isOff) ...[
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3.0,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6.0),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12.0),
+                activeTrackColor: _musicMuted ? Colors.grey : accentColor,
+                thumbColor: _musicMuted ? Colors.grey : accentColor,
+              ),
+              child: Slider(
+                value: _musicMuted ? 0.0 : _musicVolume.clamp(0.0, 1.0),
+                min: 0.0,
+                max: 1.0,
+                onChanged: _updateMusicVolume,
+              ),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            tooltip: _musicMuted ? 'Unmute Workout Music' : 'Mute Workout Music',
+            icon: Icon(
+              _musicMuted || _musicVolume == 0
+                  ? Icons.volume_off
+                  : (_musicVolume < 0.5 ? Icons.volume_down : Icons.volume_up),
+              size: isCompact ? 18 : 20,
+              color: _musicMuted ? Colors.grey : accentColor,
+            ),
+            onPressed: () => _updateMusicMuted(!_musicMuted),
+          ),
+        ] else
+          Expanded(
+            child: Text(
+              'Tap to enable workout music',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+    );
+
+    if (embedded) return content;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 10 : 14,
+        vertical: isCompact ? 6 : 8,
+      ),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(isCompact ? 12 : 14),
+        border: Border.all(
+          color: isDark
+              ? accentColor.withValues(alpha: 0.22)
+              : AppColors.lightBorder,
+        ),
+      ),
+      child: content,
+    );
+  }
 
   Widget _buildWorkoutSummaryCard() {
     final isTreadmill = TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout;
@@ -845,7 +1080,11 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                 ],
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+            _buildFocusMusicControlStrip(isCompact: true, embedded: true),
+            const SizedBox(height: 12),
             const Divider(),
             const SizedBox(height: 8),
             ElevatedButton.icon(
@@ -897,6 +1136,12 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         onContinuousModeChanged: (val) => setState(() => _continuousMode = val),
         activityType: _activityType,
         onActivityTypeChanged: (val) => setState(() => _activityType = val),
+        musicMode: _musicMode,
+        onMusicModeChanged: _updateMusicMode,
+        musicVolume: _musicVolume,
+        onMusicVolumeChanged: _updateMusicVolume,
+        musicMuted: _musicMuted,
+        onMusicMutedChanged: _updateMusicMuted,
         weightMoved: _weightMoved,
         onWeightMovedChanged: (val) => setState(() => _weightMoved = val),
         weightUnit: _weightUnit,
@@ -1326,6 +1571,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         ),
         SizedBox(height: isCompact ? 10 : 14),
 
+        // 1.5 Focus Music Live Strip
+        _buildFocusMusicControlStrip(isCompact: isCompact),
+        SizedBox(height: isCompact ? 10 : 14),
+
         // 2. Active Interval Roadmap & Segmented Round Tracker
         IntervalRoadmapCard(
           currentEvent: _currentEvent,
@@ -1613,6 +1862,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               ],
             ),
           ),
+          const SizedBox(height: 12),
+
+          // 1.5 Focus Music Live Strip
+          _buildFocusMusicControlStrip(isCompact: true),
           const SizedBox(height: 12),
 
           // 2. Round Progression Tracker
@@ -2252,6 +2505,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               _stopWorkout();
               return KeyEventResult.handled;
             }
+          } else if (event.logicalKey == LogicalKeyboardKey.keyM) {
+            _updateMusicMuted(!_musicMuted);
+            return KeyEventResult.handled;
           }
         }
         return KeyEventResult.ignored;

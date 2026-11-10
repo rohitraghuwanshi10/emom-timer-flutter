@@ -1177,5 +1177,106 @@ void main() {
       expect(result.length, equals(1));
       expect(result.first['recovery_duration_sec'], equals(90));
     });
+
+    test('Migration from version 20 to 21 adds Focus Music preferences to profiles and workout_templates', () async {
+      final migDbPath = '${await getDatabasesPath()}/migration_v20_to_v21.db';
+      await deleteDatabase(migDbPath);
+
+      // Create v20 schema
+      final dbV20 = await openDatabase(
+        migDbPath,
+        version: 20,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                name TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS workout_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_name TEXT,
+                template_name TEXT,
+                rounds INTEGER,
+                work_time INTEGER,
+                rest_time INTEGER,
+                activity_type TEXT DEFAULT 'HIIT'
+            )
+          ''');
+        },
+      );
+
+      await dbV20.insert('profiles', {
+        'name': 'Default',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      await dbV20.insert('workout_templates', {
+        'profile_name': 'Default',
+        'template_name': 'Legacy HIIT',
+        'rounds': 10,
+        'work_time': 40,
+        'rest_time': 20,
+        'activity_type': 'HIIT',
+      });
+      await dbV20.close();
+
+      // Upgrade to v21
+      final dbV21 = await openDatabase(
+        migDbPath,
+        version: 21,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 21) {
+            await db.execute('ALTER TABLE profiles ADD COLUMN music_volume REAL DEFAULT 0.7');
+            await db.execute('ALTER TABLE profiles ADD COLUMN music_muted INTEGER DEFAULT 0');
+            await db.execute("ALTER TABLE workout_templates ADD COLUMN music_mode TEXT DEFAULT 'AUTO'");
+          }
+        },
+      );
+
+      final profiles = await dbV21.query('profiles', where: 'name = ?', whereArgs: ['Default']);
+      expect(profiles.isNotEmpty, isTrue);
+      expect(profiles.first['music_volume'], equals(0.7));
+      expect(profiles.first['music_muted'], equals(0));
+
+      final legacyTemplates = await dbV21.query(
+        'workout_templates',
+        where: 'profile_name = ? AND template_name = ?',
+        whereArgs: ['Default', 'Legacy HIIT'],
+      );
+      expect(legacyTemplates.length, equals(1));
+      expect(legacyTemplates.first['music_mode'], equals('AUTO'));
+
+      await dbV21.update(
+        'profiles',
+        {'music_volume': 0.55, 'music_muted': 1},
+        where: 'name = ?',
+        whereArgs: ['Default'],
+      );
+      final updatedProfiles = await dbV21.query('profiles', where: 'name = ?', whereArgs: ['Default']);
+      expect(updatedProfiles.first['music_volume'], closeTo(0.55, 0.001));
+      expect(updatedProfiles.first['music_muted'], equals(1));
+
+      await dbV21.insert('workout_templates', {
+        'profile_name': 'Default',
+        'template_name': 'Kettlebell Complex',
+        'rounds': 15,
+        'work_time': 45,
+        'rest_time': 15,
+        'activity_type': 'STRENGTH',
+        'music_mode': 'STRENGTH',
+      });
+
+      final templates = await dbV21.query(
+        'workout_templates',
+        where: 'profile_name = ? AND template_name = ?',
+        whereArgs: ['Default', 'Kettlebell Complex'],
+      );
+      expect(templates.length, equals(1));
+      expect(templates.first['music_mode'], equals('STRENGTH'));
+
+      await dbV21.close();
+      await deleteDatabase(migDbPath);
+    });
   });
 }

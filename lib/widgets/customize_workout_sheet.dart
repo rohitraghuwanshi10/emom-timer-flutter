@@ -20,6 +20,13 @@ class CustomizeWorkoutSheet extends StatefulWidget {
   final String activityType;
   final ValueChanged<String> onActivityTypeChanged;
 
+  final String musicMode;
+  final ValueChanged<String>? onMusicModeChanged;
+  final double musicVolume;
+  final ValueChanged<double>? onMusicVolumeChanged;
+  final bool musicMuted;
+  final ValueChanged<bool>? onMusicMutedChanged;
+
   final double weightMoved;
   final ValueChanged<double> onWeightMovedChanged;
   final String weightUnit;
@@ -65,6 +72,12 @@ class CustomizeWorkoutSheet extends StatefulWidget {
     required this.onContinuousModeChanged,
     required this.activityType,
     required this.onActivityTypeChanged,
+    this.musicMode = 'AUTO',
+    this.onMusicModeChanged,
+    this.musicVolume = 0.70,
+    this.onMusicVolumeChanged,
+    this.musicMuted = false,
+    this.onMusicMutedChanged,
     required this.weightMoved,
     required this.onWeightMovedChanged,
     required this.weightUnit,
@@ -101,9 +114,18 @@ class _CustomizeWorkoutSheetState extends State<CustomizeWorkoutSheet> {
   late final TextEditingController _repsController;
   late final TextEditingController _repsCompletedController;
 
+  late String _activityType;
+  late String _musicMode;
+  late double _musicVolume;
+  late bool _musicMuted;
+
   @override
   void initState() {
     super.initState();
+    _activityType = widget.activityType;
+    _musicMode = widget.musicMode;
+    _musicVolume = widget.musicVolume;
+    _musicMuted = widget.musicMuted;
     _weightController = TextEditingController(
       text: widget.weightMoved > 0 ? widget.weightMoved.toString() : '',
     );
@@ -119,6 +141,23 @@ class _CustomizeWorkoutSheetState extends State<CustomizeWorkoutSheet> {
   }
 
   @override
+  void didUpdateWidget(covariant CustomizeWorkoutSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activityType != widget.activityType) {
+      _activityType = widget.activityType;
+    }
+    if (oldWidget.musicMode != widget.musicMode) {
+      _musicMode = widget.musicMode;
+    }
+    if (oldWidget.musicVolume != widget.musicVolume) {
+      _musicVolume = widget.musicVolume;
+    }
+    if (oldWidget.musicMuted != widget.musicMuted) {
+      _musicMuted = widget.musicMuted;
+    }
+  }
+
+  @override
   void dispose() {
     _weightController.dispose();
     _ruckWeightController.dispose();
@@ -129,7 +168,13 @@ class _CustomizeWorkoutSheetState extends State<CustomizeWorkoutSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isStrength = ActivityType.fromString(widget.activityType).isStrengthBased;
+    final ActivityType selectedActivity = ActivityType.fromString(_activityType);
+    final bool isStrength = selectedActivity.isStrengthBased;
+    final FocusMusicMode selectedMusicMode = FocusMusicMode.fromString(_musicMode);
+    final FocusMusicMode resolvedMusicMode = selectedMusicMode.resolve(
+      activity: selectedActivity,
+      isTreadmill: widget.hasTreadmill,
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -445,7 +490,7 @@ class _CustomizeWorkoutSheetState extends State<CustomizeWorkoutSheet> {
                         ],
                       ),
                       DropdownButton<String>(
-                        value: widget.activityType,
+                        value: _activityType,
                         items: ActivityType.values.map((at) {
                           return DropdownMenuItem(
                             value: at.dbCode,
@@ -454,12 +499,124 @@ class _CustomizeWorkoutSheetState extends State<CustomizeWorkoutSheet> {
                         }).toList(),
                         onChanged: (val) {
                           if (val != null) {
+                            setState(() => _activityType = val);
                             widget.onActivityTypeChanged(val);
                           }
                         },
                       ),
                     ],
                   ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            selectedMusicMode.icon,
+                            size: 18,
+                            color: selectedMusicMode.color,
+                          ),
+                          const SizedBox(width: 6),
+                          const Text('Workout Music'),
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => widget.onHelpRequested(
+                              'Workout Music',
+                              'Plays a procedural Focus Music track during your workout:\n'
+                              '• Auto: Selects Strength (100 BPM), Running (160 BPM), Focus (120 BPM), or Meditation based on Activity Type.\n'
+                              '• Dynamic Mix: Fades in during PREP, full energy during WORK, ducks during REST & chimes, and crossfades to Meditation during 2-minute HRR cooldown.',
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child: Icon(
+                                Icons.help_outline,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      DropdownButton<String>(
+                        value: selectedMusicMode.code,
+                        items: FocusMusicMode.values.map((mode) {
+                          final String text = mode == FocusMusicMode.auto
+                              ? 'Auto (${resolvedMusicMode.shortLabel})'
+                              : mode.label;
+                          return DropdownMenuItem(
+                            value: mode.code,
+                            child: Text(text),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _musicMode = val);
+                            widget.onMusicModeChanged?.call(val);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  if (selectedMusicMode != FocusMusicMode.off)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4.0),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            tooltip: _musicMuted ? 'Unmute Music' : 'Mute Music',
+                            icon: Icon(
+                              _musicMuted || _musicVolume == 0
+                                  ? Icons.volume_off
+                                  : (_musicVolume < 0.5 ? Icons.volume_down : Icons.volume_up),
+                              color: _musicMuted
+                                  ? Colors.grey
+                                  : selectedMusicMode.color,
+                            ),
+                            onPressed: () {
+                              final nextMuted = !_musicMuted;
+                              setState(() => _musicMuted = nextMuted);
+                              widget.onMusicMutedChanged?.call(nextMuted);
+                            },
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: _musicMuted ? 0.0 : _musicVolume.clamp(0.0, 1.0),
+                              min: 0.0,
+                              max: 1.0,
+                              divisions: 20,
+                              label: _musicMuted ? 'Muted' : '${(_musicVolume * 100).round()}%',
+                              onChanged: (val) {
+                                setState(() {
+                                  _musicVolume = val;
+                                  if (val > 0 && _musicMuted) {
+                                    _musicMuted = false;
+                                    widget.onMusicMutedChanged?.call(false);
+                                  }
+                                });
+                                widget.onMusicVolumeChanged?.call(val);
+                              },
+                            ),
+                          ),
+                          SizedBox(
+                            width: 44,
+                            child: Text(
+                              _musicMuted ? 'Mute' : '${(_musicVolume * 100).round()}%',
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: _musicMuted
+                                    ? Colors.grey
+                                    : Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   const Divider(),
                   if (isStrength)
                     Padding(
