@@ -199,24 +199,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           );
         }).toList();
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.person, size: 16),
-            const SizedBox(height: 2),
-            Text(
-              _profileName,
-              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 66),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.person, size: 16),
+              const SizedBox(height: 2),
+              Text(
+                _profileName,
+                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -256,8 +261,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         if (index == 0) {
           _timerKey.currentState?.loadProfileSettings();
           if (_pendingTemplate != null) {
-            _timerKey.currentState?.loadTemplate(_pendingTemplate!);
-            _pendingTemplate = null;
+            if (_timerKey.currentState != null) {
+              _timerKey.currentState!.loadTemplate(_pendingTemplate!);
+              _pendingTemplate = null;
+            } else {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (_pendingTemplate != null && _timerKey.currentState != null) {
+                  _timerKey.currentState!.loadTemplate(_pendingTemplate!);
+                  _pendingTemplate = null;
+                }
+              });
+            }
           }
         } else if (index == 1) {
           _libraryKey.currentState?.loadTemplates();
@@ -273,7 +287,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         }
       },
       children: [
-        TimerScreen(key: _timerKey),
+        TimerScreen(
+          key: _timerKey,
+          onProfileChanged: _loadProfileData,
+        ),
         LibraryScreen(
           key: _libraryKey,
           onWorkoutSelected: (template) {
@@ -312,13 +329,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   indicatorColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                   selectedIconTheme: IconThemeData(color: Theme.of(context).colorScheme.primary),
-                  selectedLabelTextStyle: TextStyle(
+                  selectedLabelTextStyle: (Theme.of(context).textTheme.labelMedium ?? const TextStyle()).copyWith(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
                   unselectedIconTheme: const IconThemeData(color: Colors.grey),
-                  unselectedLabelTextStyle: const TextStyle(
+                  unselectedLabelTextStyle: (Theme.of(context).textTheme.labelMedium ?? const TextStyle()).copyWith(
                     color: Colors.grey,
                     fontSize: 12,
                   ),

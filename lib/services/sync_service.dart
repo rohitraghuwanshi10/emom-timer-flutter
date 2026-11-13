@@ -5,8 +5,8 @@ import 'database_helper.dart';
 
 class SyncService extends ChangeNotifier {
   static final SyncService instance = SyncService._init();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  late final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final FirebaseAuth _auth = FirebaseAuth.instance;
   
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;

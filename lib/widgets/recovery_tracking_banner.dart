@@ -30,29 +30,34 @@ class RecoveryTrackingBanner extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.favorite, color: accentColor, size: 18),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'HR RECOVERY TRACKING',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: accentColor,
-                          letterSpacing: 0.8,
-                        ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.favorite, color: accentColor, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'HR RECOVERY TRACKING',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: accentColor,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          Text(
+                            'Measuring post-workout recovery ($timeStr left)',
+                            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      Text(
-                        'Measuring post-workout recovery ($timeStr left)',
-                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
               TextButton(
                 onPressed: () => HrrService.instance.finalizeRecovery(),

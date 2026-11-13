@@ -27,7 +27,9 @@ import '../utils/responsive_utils.dart';
 import '../theme/app_colors.dart';
 
 class TimerScreen extends StatefulWidget {
-  const TimerScreen({super.key});
+  final VoidCallback? onProfileChanged;
+
+  const TimerScreen({super.key, this.onProfileChanged});
 
   @override
   State<TimerScreen> createState() => TimerScreenState();
@@ -209,6 +211,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
   Future<void> _onProfileChanged(String val) async {
     await DatabaseHelper.instance.setActiveProfileName(val);
     await loadProfileSettings();
+    widget.onProfileChanged?.call();
   }
 
   Future<void> _saveMusicPrefsToProfile() async {
@@ -947,11 +950,14 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     );
   }
 
-  Widget _buildWorkoutSummaryCard() {
+  Widget _buildWorkoutSummaryCard({bool isWide = false, bool omitMusicStrip = false}) {
     final isTreadmill = TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout;
+    final bool isStrength = ActivityType.fromString(_activityType).isStrengthBased;
+    final int estTotalSec = _continuousMode ? 0 : (_totalRounds * (_workDuration + _restDuration));
+
     return Card(
       color: Theme.of(context).colorScheme.surface,
-      margin: const EdgeInsets.all(16),
+      margin: isWide ? EdgeInsets.zero : const EdgeInsets.all(16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
@@ -960,51 +966,107 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isWide ? 16 : 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // A clean 2x2 grid of key stats
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatColumn(
-                    'Work Duration',
-                    _formatDuration(_workDuration),
-                    Icons.timer,
-                    valueColor: Theme.of(context).colorScheme.primary,
+            if (isWide)
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Work Duration',
+                      _formatDuration(_workDuration),
+                      Icons.timer,
+                      valueColor: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: _buildStatColumn(
-                    'Rest Duration',
-                    _restDuration == 0 ? 'None' : _formatDuration(_restDuration),
-                    Icons.coffee,
-                    valueColor: Theme.of(context).colorScheme.secondary,
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Rest Duration',
+                      _restDuration == 0 ? 'None' : _formatDuration(_restDuration),
+                      Icons.coffee,
+                      valueColor: Theme.of(context).colorScheme.secondary,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatColumn(
-                    'Rounds',
-                    _continuousMode ? 'Open Ended' : '$_totalRounds',
-                    Icons.repeat,
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Rounds',
+                      _continuousMode ? 'Open Ended' : '$_totalRounds',
+                      Icons.repeat,
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: _buildStatColumn(
-                    'Activity Type',
-                    _getActivityName(_activityType),
-                    Icons.fitness_center,
-                    valueColor: _getActivityColor(_activityType),
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Activity Type',
+                      _getActivityName(_activityType),
+                      Icons.fitness_center,
+                      valueColor: _getActivityColor(_activityType),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  if (!_continuousMode)
+                    Expanded(
+                      child: _buildStatColumn(
+                        'Est. Duration',
+                        _formatDuration(estTotalSec),
+                        Icons.schedule,
+                      ),
+                    ),
+                  if (isStrength && (_weightMoved > 0 || _repsPerRound > 0))
+                    Expanded(
+                      child: _buildStatColumn(
+                        'Target',
+                        _weightMoved > 0
+                            ? '$_repsPerRound x ${_weightMoved.toStringAsFixed(0)}$_weightUnit'
+                            : '$_repsPerRound reps/rnd',
+                        Icons.track_changes,
+                      ),
+                    ),
+                ],
+              )
+            else ...[
+              // A clean 2x2 grid of key stats for narrow viewports
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Work Duration',
+                      _formatDuration(_workDuration),
+                      Icons.timer,
+                      valueColor: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Rest Duration',
+                      _restDuration == 0 ? 'None' : _formatDuration(_restDuration),
+                      Icons.coffee,
+                      valueColor: Theme.of(context).colorScheme.secondary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Rounds',
+                      _continuousMode ? 'Open Ended' : '$_totalRounds',
+                      Icons.repeat,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildStatColumn(
+                      'Activity Type',
+                      _getActivityName(_activityType),
+                      Icons.fitness_center,
+                      valueColor: _getActivityColor(_activityType),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (_autoRegulationEnabled) ...[
               const SizedBox(height: 12),
               const Divider(),
@@ -1072,7 +1134,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                   Expanded(
                     child: Text(
                       _notesController.text,
-                      maxLines: 2,
+                      maxLines: isWide ? 4 : 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
@@ -1080,10 +1142,12 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                 ],
               ),
             ],
-            const SizedBox(height: 12),
-            const Divider(),
-            const SizedBox(height: 8),
-            _buildFocusMusicControlStrip(isCompact: true, embedded: true),
+            if (!omitMusicStrip) ...[
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 8),
+              _buildFocusMusicControlStrip(isCompact: true, embedded: true),
+            ],
             const SizedBox(height: 12),
             const Divider(),
             const SizedBox(height: 8),
@@ -1385,9 +1449,14 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     );
   }
 
-  Widget _buildLiveWorkoutDashboard({bool isCompact = false}) {
+  Widget _buildLiveWorkoutDashboard({
+    bool isCompact = false,
+    bool includeMusicStrip = true,
+    bool includeTopControls = false,
+  }) {
     final bool isTreadmill = TreadmillBluetoothService.instance.treadmillEnabled && _treadmillWorkout;
     final bool isStrength = ActivityType.fromString(_activityType).isStrengthBased;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
     
     // Live metrics calculations
     int peakHr = 0;
@@ -1427,7 +1496,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       upNextColor = Theme.of(context).colorScheme.secondary;
     } else if (_currentEvent.state == WorkoutState.WORK) {
       if (_currentEvent.currentRound >= _totalRounds && !_continuousMode) {
-        upNextLabel = 'Workout Complete 🎉';
+        upNextLabel = 'Workout Complete';
         upNextIcon = Icons.emoji_events;
         upNextColor = Colors.amber;
       } else {
@@ -1445,18 +1514,24 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
       upNextColor = Colors.grey;
     }
 
+    final String pacingBadgeText = _autoRegulationEnabled
+        ? 'Auto-Reg < $_maxPreworkHr BPM'
+        : (_repsPerRound > 0 ? 'Target: $_repsPerRound reps/rnd' : 'Fixed EMOM');
+
+    final double sectionGap = isCompact ? 8 : 10;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 1. Header: Activity Type, Template Name & "Up Next" Card
+        // 1. Unified Header: Activity, Template Name, Controls, Up Next & Pacing
         Container(
           padding: EdgeInsets.symmetric(
-            horizontal: isCompact ? 12 : 16,
-            vertical: isCompact ? 10 : 14,
+            horizontal: isCompact ? 10 : 14,
+            vertical: isCompact ? 8 : 10,
           ),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
               width: 1,
@@ -1468,21 +1543,21 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                     decoration: BoxDecoration(
                       color: _getActivityColor(_activityType).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(7),
                       border: Border.all(color: _getActivityColor(_activityType).withValues(alpha: 0.4)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.fitness_center, size: 13, color: _getActivityColor(_activityType)),
+                        Icon(Icons.fitness_center, size: 12, color: _getActivityColor(_activityType)),
                         const SizedBox(width: 5),
                         Text(
                           _getActivityName(_activityType),
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11.5,
                             fontWeight: FontWeight.bold,
                             color: _getActivityColor(_activityType),
                           ),
@@ -1491,89 +1566,117 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     ),
                   ),
                   const SizedBox(width: 8),
-                  if (_loadedTemplateName != null)
-                    Expanded(
-                      child: Text(
-                        _loadedTemplateName!,
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
-                        overflow: TextOverflow.ellipsis,
+                  Expanded(
+                    child: Text(
+                      _loadedTemplateName ?? 'Custom Interval Session',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  const Spacer(),
-                  // Elapsed time pill
+                  ),
+                  const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : AppColors.lightSurfaceSubtle,
+                      color: isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.lightSurfaceSubtle,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.timer_outlined, size: 13, color: Colors.grey),
-                        const SizedBox(width: 5),
+                        const Icon(Icons.timer_outlined, size: 12, color: Colors.grey),
+                        const SizedBox(width: 4),
                         Text(
                           'Elapsed: ${_formatDuration(elapsedSec)}',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
                   ),
+                  if (includeTopControls) ...[
+                    const SizedBox(width: 8),
+                    _buildProfileSelectorAction(false),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      icon: Icon(
+                        (_isBluetoothConnected || _treadmillConnectionState == BluetoothConnectionState.connected)
+                            ? Icons.bluetooth_connected
+                            : Icons.bluetooth_disabled,
+                        size: 18,
+                        color: (_isBluetoothConnected || _treadmillConnectionState == BluetoothConnectionState.connected)
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.grey,
+                      ),
+                      onPressed: _showBluetoothDeviceManager,
+                    ),
+                  ],
                 ],
               ),
-              SizedBox(height: isCompact ? 8 : 12),
-              Divider(height: 1, color: Theme.of(context).brightness == Brightness.dark ? Colors.white12 : AppColors.lightBorder),
-              SizedBox(height: isCompact ? 8 : 12),
-              // Up Next Row
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: upNextColor.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
+              SizedBox(height: isCompact ? 6 : 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: upNextColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: upNextColor.withValues(alpha: 0.18)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(upNextIcon, size: 14, color: upNextColor),
+                    const SizedBox(width: 7),
+                    Text(
+                      'UP NEXT',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                        color: upNextColor,
+                      ),
                     ),
-                    child: Icon(upNextIcon, size: 16, color: upNextColor),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'UP NEXT',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                            color: upNextColor,
-                          ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        upNextLabel,
+                        style: TextStyle(
+                          fontSize: isCompact ? 12 : 13,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
-                        Text(
-                          upNextLabel,
-                          style: TextStyle(
-                            fontSize: isCompact ? 13 : 14,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Text(
+                      pacingBadgeText,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        SizedBox(height: isCompact ? 10 : 14),
+        SizedBox(height: sectionGap),
 
-        // 1.5 Focus Music Live Strip
-        _buildFocusMusicControlStrip(isCompact: isCompact),
-        SizedBox(height: isCompact ? 10 : 14),
+        // 1.5 Focus Music Live Strip (placed here on compact/portrait; docked in Left Pane on wide desktop)
+        if (includeMusicStrip) ...[
+          _buildFocusMusicControlStrip(isCompact: isCompact),
+          SizedBox(height: sectionGap),
+        ],
 
         // 2. Active Interval Roadmap & Segmented Round Tracker
         IntervalRoadmapCard(
@@ -1586,9 +1689,9 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           restTimeSec: _engine?.restTimeSec ?? 0,
           isCompact: isCompact,
         ),
-        SizedBox(height: isCompact ? 10 : 14),
+        SizedBox(height: sectionGap),
 
-        // 3. Live Telemetry 2x2 Grid
+        // 3. Live Telemetry KPI Strip (4-column row on wide panes, 2x2 fallback when narrow)
         _buildLiveTelemetryGrid(
           peakHr: peakHr,
           avgHr: avgHr,
@@ -1599,7 +1702,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
           accumVolume: accumVolume,
           isCompact: isCompact,
         ),
-        SizedBox(height: isCompact ? 10 : 14),
+        SizedBox(height: sectionGap),
 
         // 4. Live 5-Zone Heart Rate Spectrum & Distribution
         HeartRateZoneSpectrum(
@@ -1611,12 +1714,12 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
 
         // 5. Live Treadmill Telemetry (if connected)
         if (isTreadmill) ...[
-          SizedBox(height: isCompact ? 10 : 14),
-          _buildLiveTreadmillTelemetry(),
+          SizedBox(height: sectionGap),
+          _buildLiveTreadmillTelemetry(horizontalPadding: 0),
         ],
 
         // 6. Workout Cues & Form Guidance Panel
-        SizedBox(height: isCompact ? 10 : 14),
+        SizedBox(height: sectionGap),
         _buildCoachingCard(isCompact: isCompact),
       ],
     );
@@ -1637,10 +1740,10 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     }
 
     return Container(
-      padding: EdgeInsets.all(isCompact ? 12 : 16),
+      padding: EdgeInsets.all(isCompact ? 10 : 12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: Colors.amber.withValues(alpha: 0.3),
           width: 1,
@@ -1650,63 +1753,49 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               color: Colors.amber.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.tips_and_updates_outlined, size: 16, color: Colors.amber),
+            child: const Icon(Icons.tips_and_updates_outlined, size: 15, color: Colors.amber),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'WORKOUT CUES & NOTES',
-                      style: TextStyle(
-                        fontSize: isCompact ? 10 : 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                        color: Colors.amber,
-                      ),
-                    ),
-                    if (hasNotes && _loadedTemplateName != null)
-                      Text(
-                        _loadedTemplateName!,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                  ],
+                Text(
+                  'WORKOUT CUES & NOTES',
+                  style: TextStyle(
+                    fontSize: isCompact ? 10 : 10.5,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                    color: Colors.amber,
+                  ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
                   hasNotes ? _notesController.text : coachingTips,
                   style: TextStyle(
-                    fontSize: isCompact ? 12 : 13,
+                    fontSize: isCompact ? 12 : 12.5,
                     color: Theme.of(context).colorScheme.onSurface,
-                    height: 1.35,
+                    height: 1.3,
                     fontWeight: hasNotes ? FontWeight.w500 : FontWeight.w400,
                   ),
                 ),
                 if (hasNotes && coachingTips.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Divider(
                     height: 1,
                     color: isDark ? Colors.white10 : AppColors.lightBorder,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Icon(
                         Icons.fitness_center,
-                        size: 12,
+                        size: 11.5,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 6),
@@ -2133,71 +2222,94 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     final String currentZone = _currentHr > 0 ? _calculateZone(_currentHr) : '';
     final Color zoneColor = _currentHr > 0 ? CalorieCalculator.getZoneColor(currentZone) : Colors.grey;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Column 1: Heart Rate & Calories
-        Expanded(
-          child: Column(
-            children: [
-              _buildLiveMetricTile(
-                title: 'HEART RATE',
-                icon: Icons.favorite,
-                iconColor: hasHr ? Colors.redAccent : Colors.grey,
-                mainValue: hasHr ? '$_currentHr BPM' : '-- BPM',
-                subValue: currentZone.isNotEmpty ? currentZone : 'No Monitor',
-                subValueColor: zoneColor,
-                detailText: hasHr ? 'Peak: $peakHr • Avg: $avgHr BPM' : 'Connect HR Monitor',
-                isCompact: isCompact,
-              ),
-              SizedBox(height: isCompact ? 8 : 12),
-              _buildLiveMetricTile(
-                title: 'ENERGY BURNED',
-                icon: Icons.local_fire_department,
-                iconColor: Colors.orangeAccent,
-                mainValue: '${caloriesBurnt.toStringAsFixed(0)} kcal',
-                subValue: kcalPerMin > 0 ? '${kcalPerMin.toStringAsFixed(1)} kcal/min' : 'Active Calorie Burn',
-                subValueColor: Colors.orangeAccent,
-                detailText: 'Based on biometric profile',
-                isCompact: isCompact,
-              ),
-            ],
-          ),
-        ),
-        SizedBox(width: isCompact ? 8 : 12),
-        // Column 2: Work/Rest Breakdown & Volume/Reps
-        Expanded(
-          child: Column(
-            children: [
-              _buildLiveMetricTile(
-                title: 'WORK / REST SPLIT',
-                icon: Icons.pie_chart_outline,
-                iconColor: Theme.of(context).colorScheme.primary,
-                mainValue: 'Work: ${_formatDuration(_workDuration)}',
-                subValue: 'Rest: ${_restDuration == 0 ? 'None' : _formatDuration(_restDuration)}',
-                subValueColor: Theme.of(context).colorScheme.secondary,
-                detailText: _autoRegulationEnabled ? 'Auto-Regulated (< $_maxPreworkHr BPM)' : 'Fixed Interval EMOM',
-                isCompact: isCompact,
-              ),
-              SizedBox(height: isCompact ? 8 : 12),
-              _buildLiveMetricTile(
-                title: isStrength ? 'VOLUME & LOAD' : (_ruckWeight > 0 ? 'RUCK WEIGHT' : 'TARGET REPS'),
-                icon: Icons.fitness_center,
-                iconColor: const Color(0xFF00E5FF),
-                mainValue: isStrength
-                    ? '${_weightMoved.toStringAsFixed(1)} $_weightUnit'
-                    : (_ruckWeight > 0 ? '${_ruckWeight.toStringAsFixed(1)} $_ruckWeightUnit' : '$_repsPerRound reps/rnd'),
-                subValue: isStrength
-                    ? 'Total Vol: ${accumVolume.toStringAsFixed(0)} $_weightUnit'
-                    : (_ruckWeight > 0 ? '$_repsPerRound reps per round' : 'Target: ${_totalRounds * _repsPerRound} reps'),
-                subValueColor: const Color(0xFF00E5FF),
-                detailText: 'Activity: $_activityType',
-                isCompact: isCompact,
-              ),
-            ],
-          ),
-        ),
-      ],
+    final Widget hrTile = _buildLiveMetricTile(
+      title: 'PEAK / AVG HR',
+      icon: Icons.favorite,
+      iconColor: hasHr ? Colors.redAccent : Colors.grey,
+      mainValue: hasHr ? '$peakHr / $avgHr' : '-- / --',
+      subValue: hasHr
+          ? (_currentHr > 0 && currentZone.isNotEmpty ? 'Live $_currentHr • $currentZone' : 'BPM Avg')
+          : 'No HR Monitor',
+      subValueColor: zoneColor,
+      isCompact: isCompact,
+    );
+
+    final Widget caloriesTile = _buildLiveMetricTile(
+      title: 'ENERGY BURNED',
+      icon: Icons.local_fire_department,
+      iconColor: Colors.orangeAccent,
+      mainValue: '${caloriesBurnt.toStringAsFixed(0)} kcal',
+      subValue: kcalPerMin > 0 ? '${kcalPerMin.toStringAsFixed(1)} kcal/min' : 'Active Burn',
+      subValueColor: Colors.orangeAccent,
+      isCompact: isCompact,
+    );
+
+    final Widget splitTile = _buildLiveMetricTile(
+      title: 'WORK / REST',
+      icon: Icons.pie_chart_outline,
+      iconColor: Theme.of(context).colorScheme.primary,
+      mainValue: '${_formatDuration(_workDuration)} / ${_restDuration == 0 ? 'None' : _formatDuration(_restDuration)}',
+      subValue: _autoRegulationEnabled ? 'Auto < $_maxPreworkHr BPM' : 'Fixed EMOM',
+      subValueColor: Theme.of(context).colorScheme.secondary,
+      isCompact: isCompact,
+    );
+
+    final Widget loadTile = _buildLiveMetricTile(
+      title: isStrength ? 'VOLUME & LOAD' : (_ruckWeight > 0 ? 'RUCK WEIGHT' : 'TARGET REPS'),
+      icon: Icons.fitness_center,
+      iconColor: const Color(0xFF00E5FF),
+      mainValue: isStrength
+          ? '${_weightMoved.toStringAsFixed(1)} $_weightUnit'
+          : (_ruckWeight > 0 ? '${_ruckWeight.toStringAsFixed(1)} $_ruckWeightUnit' : '$_repsPerRound reps/rnd'),
+      subValue: isStrength
+          ? 'Total: ${accumVolume.toStringAsFixed(0)} $_weightUnit'
+          : (_ruckWeight > 0 ? '$_repsPerRound reps/rnd' : 'Total: ${_totalRounds * _repsPerRound} reps'),
+      subValueColor: const Color(0xFF00E5FF),
+      isCompact: isCompact,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double gap = isCompact ? 8 : 10;
+        if (constraints.maxWidth >= 560) {
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: hrTile),
+                SizedBox(width: gap),
+                Expanded(child: splitTile),
+                SizedBox(width: gap),
+                Expanded(child: caloriesTile),
+                SizedBox(width: gap),
+                Expanded(child: loadTile),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: hrTile),
+                SizedBox(width: gap),
+                Expanded(child: splitTile),
+              ],
+            ),
+            SizedBox(height: gap),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: caloriesTile),
+                SizedBox(width: gap),
+                Expanded(child: loadTile),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -2208,31 +2320,34 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     required String mainValue,
     required String subValue,
     required Color subValueColor,
-    required String detailText,
     bool isCompact = false,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: EdgeInsets.all(isCompact ? 9 : 14),
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 9 : 12,
+        vertical: isCompact ? 8 : 10,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(isCompact ? 12 : 16),
+        borderRadius: BorderRadius.circular(isCompact ? 12 : 14),
         border: Border.all(color: isDark ? Colors.white10 : AppColors.lightBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(
             children: [
-              Icon(icon, size: isCompact ? 12 : 14, color: iconColor),
-              const SizedBox(width: 6),
+              Icon(icon, size: isCompact ? 11 : 13, color: iconColor),
+              const SizedBox(width: 5),
               Expanded(
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: isCompact ? 9 : 10,
+                    fontSize: isCompact ? 8.5 : 9.5,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 1.1,
+                    letterSpacing: 1.0,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -2240,33 +2355,26 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               ),
             ],
           ),
-          SizedBox(height: isCompact ? 4 : 8),
+          SizedBox(height: isCompact ? 4 : 6),
           Text(
             mainValue,
             style: TextStyle(
-              fontSize: isCompact ? 14 : 18,
+              fontSize: isCompact ? 14 : 16,
               fontWeight: FontWeight.bold,
               color: Theme.of(context).colorScheme.onSurface,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
           Text(
             subValue,
             style: TextStyle(
-              fontSize: isCompact ? 11 : 12,
+              fontSize: isCompact ? 10.5 : 11.5,
               fontWeight: FontWeight.w600,
               color: subValueColor,
             ),
-          ),
-          SizedBox(height: isCompact ? 4 : 6),
-          Divider(height: 1, color: isDark ? Colors.white10 : AppColors.lightBorder),
-          SizedBox(height: isCompact ? 4 : 6),
-          Text(
-            detailText,
-            style: TextStyle(
-              fontSize: isCompact ? 9 : 10,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -2287,7 +2395,8 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     final bool useWide = (screenSize.width >= 900) ||
         (orientation == Orientation.landscape && screenSize.width >= 600) ||
         isPhoneLandscape;
-    final bool hideAppBar = isPhoneLandscape;
+    final bool isWideDesktop = useWide && !isPhoneLandscape;
+    final bool hideAppBar = useWide;
     final bool showTreadmillStop = !isIdle &&
         TreadmillBluetoothService.instance.treadmillEnabled &&
         _treadmillWorkout &&
@@ -2323,33 +2432,40 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Left Pane: High-Visibility Timer Circle, Action Buttons, and Live HR Display
+                  // Left Pane: High-Visibility Timer Circle, Action Buttons, Live HR, and Music Player
                   Expanded(
-                    flex: hideAppBar ? 5 : 5,
+                    flex: isWideDesktop ? 4 : 5,
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final availableHeight = constraints.maxHeight;
                         final availableWidth = constraints.maxWidth;
-                        // Dynamically scale timer size up to 500px while fitting the available pane bounds
-                        final timerSize = (availableHeight * (isPhoneLandscape ? 0.50 : 0.55))
-                            .clamp(isPhoneLandscape ? 120.0 : 240.0, isPhoneLandscape ? 175.0 : 500.0)
-                            .clamp(0.0, availableWidth * 0.82);
+                        // Dynamically scale timer size while keeping ring + controls + HR + music comfortable
+                        final timerSize = (availableHeight * (isPhoneLandscape ? 0.50 : 0.54))
+                            .clamp(isPhoneLandscape ? 120.0 : 220.0, isPhoneLandscape ? 175.0 : 450.0)
+                            .clamp(0.0, availableWidth * 0.86);
 
                         return Center(
                           child: SingleChildScrollView(
                             padding: EdgeInsets.symmetric(
-                              vertical: isPhoneLandscape ? 6 : 20,
-                              horizontal: isPhoneLandscape ? 10 : 24,
+                              vertical: isPhoneLandscape ? 6 : 12,
+                              horizontal: isPhoneLandscape ? 10 : 18,
                             ),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 _buildTimerDisplay(customSize: timerSize),
-                                SizedBox(height: isPhoneLandscape ? 10 : 22),
+                                SizedBox(height: isPhoneLandscape ? 8 : 14),
                                 _buildInlineControls(isIdle, showTreadmillStop),
-                                SizedBox(height: isPhoneLandscape ? 8 : 18),
+                                SizedBox(height: isPhoneLandscape ? 6 : 12),
                                 _buildLiveHeartRateDisplay(isCompact: isPhoneLandscape),
+                                if (isWideDesktop) ...[
+                                  const SizedBox(height: 14),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 420),
+                                    child: _buildFocusMusicControlStrip(isCompact: true),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -2363,33 +2479,78 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
                     thickness: 1,
                     color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.15),
                   ),
-                  // Right Pane: Telemetry Dashboard during workout, or Template/Summary during Idle
+                  // Right Pane: Telemetry Dashboard during workout, or Configuration during Idle
                   Expanded(
-                    flex: hideAppBar ? 7 : 7,
-                    child: Center(
+                    flex: 7,
+                    child: Align(
+                      alignment: Alignment.topCenter,
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: isPhoneLandscape ? 700 : 860),
+                        constraints: BoxConstraints(maxWidth: isPhoneLandscape ? 700 : 1120),
                         child: SingleChildScrollView(
                           padding: EdgeInsets.symmetric(
-                            horizontal: hideAppBar ? 12 : 24,
-                            vertical: hideAppBar ? 8 : 18,
+                            horizontal: isPhoneLandscape ? 10 : 18,
+                            vertical: isPhoneLandscape ? 6 : 12,
                           ),
                           child: isIdle
                               ? Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
-                                    if (_loadedTemplateName != null) ...[
+                                    if (!isPhoneLandscape) ...[
+                                      Row(
+                                        children: [
+                                          if (_loadedTemplateName != null)
+                                            Expanded(
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: _buildLoadedTemplateBadge(isIdle)!,
+                                              ),
+                                            )
+                                          else
+                                            Expanded(
+                                              child: Text(
+                                                'WORKOUT CONFIGURATION',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  letterSpacing: 1.2,
+                                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                                ),
+                                              ),
+                                            ),
+                                          const SizedBox(width: 8),
+                                          _buildProfileSelectorAction(isIdle),
+                                          IconButton(
+                                            visualDensity: VisualDensity.compact,
+                                            icon: Icon(
+                                              (_isBluetoothConnected || _treadmillConnectionState == BluetoothConnectionState.connected)
+                                                  ? Icons.bluetooth_connected
+                                                  : Icons.bluetooth_disabled,
+                                              color: (_isBluetoothConnected || _treadmillConnectionState == BluetoothConnectionState.connected)
+                                                  ? Theme.of(context).colorScheme.primary
+                                                  : Colors.grey,
+                                            ),
+                                            onPressed: _showBluetoothDeviceManager,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                    ] else if (_loadedTemplateName != null) ...[
                                       Center(child: _buildLoadedTemplateBadge(isIdle)!),
-                                      const SizedBox(height: 12),
+                                      const SizedBox(height: 8),
                                     ],
                                     _buildRecoveryTrackingBanner(),
-                                    const SizedBox(height: 8),
-                                    _buildLiveTreadmillTelemetry(),
-                                    const SizedBox(height: 8),
-                                    _buildWorkoutSummaryCard(),
+                                    _buildLiveTreadmillTelemetry(horizontalPadding: 0),
+                                    _buildWorkoutSummaryCard(
+                                      isWide: true,
+                                      omitMusicStrip: isWideDesktop,
+                                    ),
                                   ],
                                 )
-                              : _buildLiveWorkoutDashboard(isCompact: hideAppBar),
+                              : _buildLiveWorkoutDashboard(
+                                  isCompact: isPhoneLandscape,
+                                  includeMusicStrip: !isWideDesktop,
+                                  includeTopControls: isWideDesktop,
+                                ),
                         ),
                       ),
                     ),
@@ -2777,7 +2938,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     );
   }
 
-  Widget _buildLiveTreadmillTelemetry() {
+  Widget _buildLiveTreadmillTelemetry({double horizontalPadding = 24.0}) {
     final bool isEnabled = TreadmillBluetoothService.instance.treadmillEnabled;
     final bool isConnected = _treadmillConnectionState == BluetoothConnectionState.connected;
     if (!isEnabled || !isConnected || !_treadmillWorkout) return const SizedBox.shrink();
@@ -2793,7 +2954,7 @@ class TimerScreenState extends State<TimerScreen> with SingleTickerProviderState
     final double displayDist = isMetric ? rawDist : rawDist * 0.621371;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       child: Card(
         color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
         shape: RoundedRectangleBorder(

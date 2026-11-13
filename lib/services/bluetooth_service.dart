@@ -173,4 +173,18 @@ class AppBluetoothService {
     _lastConnectionState = BluetoothConnectionState.disconnected;
     _deviceStateController.add(BluetoothConnectionState.disconnected);
   }
+
+  @visibleForTesting
+  void simulateHeartRateForTesting(int bpm, {bool connected = true}) {
+    final targetState = connected
+        ? BluetoothConnectionState.connected
+        : BluetoothConnectionState.disconnected;
+    if (_lastConnectionState != targetState) {
+      _lastConnectionState = targetState;
+      _deviceStateController.add(targetState);
+    }
+    if (bpm > 0) {
+      _hrController.add(bpm);
+    }
+  }
 }

@@ -104,10 +104,10 @@ class HeartRateZoneSpectrum extends StatelessWidget {
     final List<int> hrTrend = hrDetails.map((e) => (e['bpm'] as num).toInt()).toList();
 
     return Container(
-      padding: EdgeInsets.all(isCompact ? 12 : 16),
+      padding: EdgeInsets.all(isCompact ? 10 : 12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: hasHr
               ? currentZoneColor.withValues(alpha: 0.3)
@@ -126,14 +126,14 @@ class HeartRateZoneSpectrum extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(6),
+                    padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
                       color: hasHr ? currentZoneColor.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.graphic_eq,
-                      size: 14,
+                      size: 13,
                       color: hasHr ? currentZoneColor : Colors.grey,
                     ),
                   ),
@@ -143,7 +143,7 @@ class HeartRateZoneSpectrum extends StatelessWidget {
                     style: TextStyle(
                       fontSize: isCompact ? 10 : 11,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+                      letterSpacing: 1.1,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -151,7 +151,7 @@ class HeartRateZoneSpectrum extends StatelessWidget {
               ),
               if (hasHr && currentZone.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
                   decoration: BoxDecoration(
                     color: currentZoneColor.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(12),
@@ -172,7 +172,7 @@ class HeartRateZoneSpectrum extends StatelessWidget {
                       Text(
                         '$currentZone • $currentHr BPM',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.bold,
                           color: currentZoneColor,
                         ),
@@ -191,13 +191,13 @@ class HeartRateZoneSpectrum extends StatelessWidget {
                 ),
             ],
           ),
-          SizedBox(height: isCompact ? 10 : 14),
+          SizedBox(height: isCompact ? 8 : 10),
 
           // 5-Zone Continuous Segmented Bar
           ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(5),
             child: SizedBox(
-              height: isCompact ? 8 : 10,
+              height: isCompact ? 7 : 8,
               child: Row(
                 children: zones.map((z) {
                   return Expanded(
@@ -224,7 +224,7 @@ class HeartRateZoneSpectrum extends StatelessWidget {
               ),
             ),
           ),
-          SizedBox(height: isCompact ? 8 : 12),
+          SizedBox(height: isCompact ? 6 : 8),
 
           // Zone Breakdown Chips
           Row(
@@ -238,7 +238,7 @@ class HeartRateZoneSpectrum extends StatelessWidget {
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 2),
                   padding: EdgeInsets.symmetric(
-                    vertical: isCompact ? 6 : 8,
+                    vertical: isCompact ? 5 : 6,
                     horizontal: 4,
                   ),
                   decoration: BoxDecoration(
@@ -290,7 +290,7 @@ class HeartRateZoneSpectrum extends StatelessWidget {
 
           // Live HR Sparkline Trend (renders when sufficient data is available)
           if (hrTrend.length >= 6) ...[
-            SizedBox(height: isCompact ? 10 : 14),
+            SizedBox(height: isCompact ? 6 : 9),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -312,9 +312,9 @@ class HeartRateZoneSpectrum extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             SizedBox(
-              height: isCompact ? 40 : 54,
+              height: isCompact ? 34 : 44,
               child: CustomPaint(
                 painter: _HrSparklinePainter(
                   data: hrTrend,
