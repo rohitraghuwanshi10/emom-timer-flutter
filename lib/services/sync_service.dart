@@ -26,6 +26,41 @@ class SyncService extends ChangeNotifier {
 
   SyncService._init();
 
+  static const _hrrKeys = ['hrr_1min', 'hrr_2min', 'recovery_duration_sec'];
+
+  /// Remote shape of one local heart_rate_logs row.
+  @visibleForTesting
+  static Map<String, dynamic> hrLogToRemote(Map<String, dynamic> log) => {
+        'capture_time': log['capture_time'],
+        'bpm': log['bpm'],
+        'zone': log['zone'],
+        'is_recovery': log['is_recovery'] ?? 0,
+      };
+
+  /// HRR fields to push for a workout that already exists remotely. Empty
+  /// until local recovery tracking has finished (recovery_duration_sec set).
+  @visibleForTesting
+  static Map<String, dynamic> hrrUploadFields(
+      Map<String, dynamic> local, Map<String, dynamic> remote) {
+    if (local['recovery_duration_sec'] == null) return {};
+    return {
+      for (final k in _hrrKeys)
+        if (local[k] != null && local[k] != remote[k]) k: local[k],
+    };
+  }
+
+  /// HRR fields to pull from a remote workout recorded and tracked on
+  /// another device. Never overwrites local recovery results.
+  @visibleForTesting
+  static Map<String, dynamic> hrrDownloadFields(
+      Map<String, dynamic> local, Map<String, dynamic> remote) {
+    if (local['recovery_duration_sec'] != null ||
+        remote['recovery_duration_sec'] == null) {
+      return {};
+    }
+    return {for (final k in _hrrKeys) k: remote[k]};
+  }
+
   Future<void> deleteTemplateRemote(String profileName, String templateName) async {
     if (!_isSignedIn()) {
       debugPrint('SyncService: Signed out; skipping remote delete of template $templateName.');
@@ -393,12 +428,7 @@ class SyncService extends ChangeNotifier {
           orderBy: 'capture_time ASC'
         );
         
-        final hrDataList = hrLogs.map((log) => {
-          'capture_time': log['capture_time'],
-          'bpm': log['bpm'],
-          'zone': log['zone'],
-          'is_recovery': log['is_recovery'] ?? 0,
-        }).toList();
+        final hrDataList = hrLogs.map(hrLogToRemote).toList();
 
         await _firestore.collection('workouts').doc(docId).set({
           'profile_name': pName,
@@ -461,6 +491,25 @@ class SyncService extends ChangeNotifier {
           if (localTonnage != remoteTonnage && localTonnage > 0.0) {
             updateFields['total_weight_moved'] = localTonnage;
             remoteData['total_weight_moved'] = localTonnage;
+          }
+
+          // Post-workout recovery finishes ~2 min after the workout was first
+          // uploaded, so push the HRR results and the full HR series (which now
+          // includes the recovery samples) once they exist locally.
+          final hrrFields = hrrUploadFields(w, remoteData);
+          if (hrrFields.isNotEmpty) {
+            final hrLogs = await db.query(
+              'heart_rate_logs',
+              where: 'workout_id = ?',
+              whereArgs: [w['id']],
+              orderBy: 'capture_time ASC',
+            );
+            final remoteLogCount = (remoteData['hr_details'] as List?)?.length ?? 0;
+            if (hrLogs.length > remoteLogCount) {
+              updateFields['hr_details'] = hrLogs.map(hrLogToRemote).toList();
+            }
+            updateFields.addAll(hrrFields);
+            remoteData.addAll(hrrFields);
           }
 
           if (updateFields.isNotEmpty) {
@@ -575,6 +624,8 @@ class SyncService extends ChangeNotifier {
         if (localTonnage == 0.0 && remoteTonnage > 0.0) {
           updateMap['total_weight_moved'] = remoteTonnage;
         }
+
+        updateMap.addAll(hrrDownloadFields(localW, remoteData));
         
         if (updateMap.isNotEmpty) {
           debugPrint('SyncService: Downloading updated fields for $docId: $updateMap');
