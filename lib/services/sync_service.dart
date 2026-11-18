@@ -1,13 +1,22 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'auth_service.dart';
 import 'database_helper.dart';
 
 class SyncService extends ChangeNotifier {
   static final SyncService instance = SyncService._init();
-  late final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  late final FirebaseAuth _auth = FirebaseAuth.instance;
-  
+
+  // Resolved lazily, only after the sign-in guard has passed.
+  FirebaseFirestore Function() _firestoreFactory = () => FirebaseFirestore.instance;
+  late final FirebaseFirestore _firestore = _firestoreFactory();
+  bool Function() _isSignedIn = () => AuthService.instance.isSignedIn;
+
+  @visibleForTesting
+  set isSignedInOverride(bool Function() fn) => _isSignedIn = fn;
+
+  @visibleForTesting
+  set firestoreFactoryOverride(FirebaseFirestore Function() fn) => _firestoreFactory = fn;
+
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
   String? _lastError;
@@ -18,10 +27,11 @@ class SyncService extends ChangeNotifier {
   SyncService._init();
 
   Future<void> deleteTemplateRemote(String profileName, String templateName) async {
+    if (!_isSignedIn()) {
+      debugPrint('SyncService: Signed out; skipping remote delete of template $templateName.');
+      return;
+    }
     try {
-      if (_auth.currentUser == null) {
-        await _auth.signInAnonymously();
-      }
       final docId = '${profileName}_$templateName';
       await _firestore.collection('templates').doc(docId).delete();
       debugPrint('SyncService: Deleted template $docId from Firestore.');
@@ -31,6 +41,14 @@ class SyncService extends ChangeNotifier {
   }
 
   Future<bool> signInAndSync() async {
+    // Firestore must never be touched without a household account.
+    if (!_isSignedIn()) {
+      _syncStatus = "Signed out";
+      _lastError = "Sign in to enable cloud sync.";
+      _isSyncing = false;
+      notifyListeners();
+      return false;
+    }
     if (_isSyncing) {
       _lastError = "Sync already in progress (Status: $_syncStatus).";
       return false;
@@ -41,22 +59,7 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
     
     try {
-      // 1. Silent anonymous login
-      try {
-        if (_auth.currentUser == null) {
-          _syncStatus = "Signing in anonymously...";
-          notifyListeners();
-          debugPrint('SyncService: Signing in anonymously...');
-          await _auth.signInAnonymously().timeout(const Duration(seconds: 15), onTimeout: () {
-            throw Exception("Authentication timeout. Check your internet connection.");
-          });
-          debugPrint('SyncService: Logged in as User ID: ${_auth.currentUser?.uid}');
-        }
-      } catch (authError) {
-        debugPrint('SyncService: Firebase Auth/Keychain access failed (proceeding to sync anyway): $authError');
-      }
-      
-      // 2. Perform the two-way sync
+      // Perform the two-way sync
       _syncStatus = "Syncing database...";
       notifyListeners();
       await _syncData().timeout(const Duration(seconds: 180), onTimeout: () {

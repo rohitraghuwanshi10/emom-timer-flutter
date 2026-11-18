@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 import '../services/database_helper.dart';
 import '../services/sync_service.dart';
 import '../services/health_service.dart';
@@ -56,6 +57,86 @@ class ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     loadProfile();
     SyncService.instance.addListener(_onSyncStatusChanged);
+    AuthService.instance.addListener(_onAuthChanged);
+  }
+
+  void _onAuthChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _showSignInDialog() async {
+    final signedIn = await showDialog<bool>(
+      context: context,
+      builder: (context) => const _SignInDialog(),
+    );
+    if (signedIn == true && mounted) {
+      await _triggerSync();
+    }
+  }
+
+  Future<void> _signOut() async {
+    await AuthService.instance.signOut();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Signed out. Local data is kept on this device.')),
+      );
+    }
+  }
+
+  Widget _buildCloudSyncTile() {
+    final auth = AuthService.instance;
+    final sync = SyncService.instance;
+
+    if (!auth.isSignedIn) {
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Cloud Sync'),
+        subtitle: const Text(
+          'Sign in to sync profiles, templates and history.',
+          style: TextStyle(fontSize: 12),
+        ),
+        trailing: ElevatedButton.icon(
+          icon: const Icon(Icons.login, size: 18),
+          label: const Text('Sign in'),
+          onPressed: _showSignInDialog,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Cloud Sync'),
+          subtitle: Text(
+            sync.isSyncing
+                ? 'Status: ${sync.syncStatus}'
+                : 'Signed in as ${auth.email ?? "household account"}',
+            style: const TextStyle(fontSize: 12),
+          ),
+          trailing: sync.isSyncing
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : ElevatedButton.icon(
+                  icon: const Icon(Icons.sync, size: 18),
+                  label: const Text('Sync Now'),
+                  onPressed: _triggerSync,
+                ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            icon: const Icon(Icons.logout, size: 18),
+            label: const Text('Sign out'),
+            onPressed: sync.isSyncing ? null : _signOut,
+          ),
+        ),
+      ],
+    );
   }
 
   void _onSyncStatusChanged() {
@@ -71,6 +152,7 @@ class ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     SyncService.instance.removeListener(_onSyncStatusChanged);
+    AuthService.instance.removeListener(_onAuthChanged);
     super.dispose();
   }
 
@@ -522,27 +604,7 @@ class ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 32),
             const Text('Cloud Sync', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Cloud Sync'),
-              subtitle: Text(
-                SyncService.instance.isSyncing 
-                    ? 'Status: ${SyncService.instance.syncStatus}' 
-                    : 'Profiles, templates, and history are synced to the cloud.',
-                style: const TextStyle(fontSize: 12),
-              ),
-              trailing: SyncService.instance.isSyncing 
-                  ? const SizedBox(
-                      width: 24, 
-                      height: 24, 
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : ElevatedButton.icon(
-                      icon: const Icon(Icons.sync, size: 18),
-                      label: const Text('Sync Now'),
-                      onPressed: _triggerSync,
-                    ),
-            ),
+            _buildCloudSyncTile(),
           ],
         ),
       ),
@@ -594,6 +656,111 @@ class ProfileScreenState extends State<ProfileScreen> {
               await _saveProfile(showFeedback: false);
             }
           },
+        ),
+      ],
+    );
+  }
+}
+
+/// Household account sign-in. Accounts are created in the Firebase console;
+/// there is intentionally no sign-up or password reset here.
+class _SignInDialog extends StatefulWidget {
+  const _SignInDialog();
+
+  @override
+  State<_SignInDialog> createState() => _SignInDialogState();
+}
+
+class _SignInDialogState extends State<_SignInDialog> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    final error = await AuthService.instance.signIn(
+      _emailController.text,
+      _passwordController.text,
+    );
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.of(context).pop(true);
+    } else {
+      setState(() {
+        _submitting = false;
+        _error = error;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Sign in to Cloud Sync'),
+      content: AutofillGroup(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _emailController,
+              enabled: !_submitting,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              autocorrect: false,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordController,
+              enabled: !_submitting,
+              obscureText: true,
+              keyboardType: TextInputType.visiblePassword,
+              autofillHints: const [AutofillHints.password],
+              autocorrect: false,
+              enableSuggestions: false,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+              decoration: const InputDecoration(labelText: 'Password'),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Sign in'),
         ),
       ],
     );

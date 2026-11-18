@@ -6,6 +6,7 @@ import 'screens/timer_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/profile_screen.dart';
+import 'services/auth_service.dart';
 import 'services/sync_service.dart';
 import 'services/database_helper.dart';
 import 'services/bluetooth_service.dart';
@@ -30,7 +31,8 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    // Trigger initial background sync
+    await AuthService.instance.init();
+    // Trigger initial background sync (no-op until the household account is signed in)
     SyncService.instance.signInAndSync();
   } catch (e) {
     debugPrint('Firebase initialization error: $e');

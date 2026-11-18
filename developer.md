@@ -108,6 +108,12 @@ flutter test
 - **`/templates/{profile_name_template_name}`**: Stores template data (including `auto_regulate` and treadmill settings).
 - **`/workouts/{profile_name_start_time}`**: Stores workout summary statistics along with the nested `hr_details` map containing all heart rate logs.
 
+### Cloud Sync Authentication
+- **Household account**: Sync requires a Firebase **Email/Password** account shared by the household's devices. Create it in Firebase console > Authentication > Users (enable the Email/Password provider). The app has no sign-up or password-reset UI; sign in from Profile > Cloud Sync > **Sign in**. While signed out, `SyncService` does not touch Firestore at all.
+- **Security rules**: [firestore.rules](firestore.rules) only allows the UIDs listed in `isHousehold()` that signed in with the `password` provider. Replace `REPLACE_WITH_HOUSEHOLD_UID` with the account's UID (shown in the Users list, not a secret), then deploy by pasting the file into Firebase console > Firestore > Rules, or with `firebase deploy --only firestore:rules` (uses [firebase.json](firebase.json)).
+- **Anonymous auth**: Disable the Anonymous provider in Firebase console > Authentication > Sign-in method. Leftover anonymous sessions from older builds are signed out by `AuthService.init()`.
+- **macOS keychain**: FirebaseAuth persists the session in the keychain, so both `macos/Runner/DebugProfile.entitlements` and `Release.entitlements` must include `keychain-access-groups` with `$(AppIdentifierPrefix)<bundle id>`. Without it sign-in fails with `keychain-error`.
+
 ---
 
 ## 🏃 Kingsmith WalkingPad BLE Protocol (GATT Specs)
