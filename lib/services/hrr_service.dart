@@ -52,6 +52,34 @@ class HrrService {
   StreamSubscription<int>? _bleHrSub;
   StreamSubscription<int>? _watchHrSub;
   int _lastHrSample = 0;
+  DateTime? _lastHrAt;
+  DateTime Function() _now = DateTime.now;
+
+  /// A sample older than this is treated as "no signal" (e.g. the strap or
+  /// Watch stopped streaming) instead of being repeated as if it were live.
+  static const Duration staleAfter = Duration(seconds: 5);
+
+  @visibleForTesting
+  set clockOverride(DateTime Function() now) => _now = now;
+
+  @visibleForTesting
+  void addSampleForTest(int hr) => _onHeartRateSample(hr);
+
+  @visibleForTesting
+  bool get hasFreshHr => _hrFresh;
+
+  bool get _hrFresh =>
+      _lastHrSample > 0 &&
+      _lastHrAt != null &&
+      _now().difference(_lastHrAt!) <= staleAfter;
+
+  /// HRR drop in bpm; null when there is no valid reading.
+  @visibleForTesting
+  static int? computeDrop(int baseline, int? hr) {
+    if (hr == null || hr <= 0 || baseline <= 0) return null;
+    final drop = baseline - hr;
+    return drop > 0 ? drop : 0;
+  }
 
   void init() {
     _bleHrSub?.cancel();
@@ -64,6 +92,7 @@ class HrrService {
   void _onHeartRateSample(int hr) {
     if (hr <= 0) return;
     _lastHrSample = hr;
+    _lastHrAt = _now();
     
     if (state.isTracking && state.workoutId != null) {
       stateNotifier.value = state.copyWith(currentHr: hr);
@@ -81,7 +110,9 @@ class HrrService {
   void startRecovery({required int workoutId, required int peakHr}) {
     stopRecovery(finalize: true);
 
-    final initialPeak = peakHr > 0 ? peakHr : _lastHrSample;
+    // HRR baseline = HR when exercise stops (clinical definition). Fall back to
+    // the workout max only if there is no live reading at that moment.
+    final initialPeak = _hrFresh ? _lastHrSample : peakHr;
     stateNotifier.value = HrrState(
       isTracking: true,
       secondsRemaining: 120,
@@ -104,7 +135,7 @@ class HrrService {
       final elapsed = 120 - newRemaining;
 
       // Record a 1-second HR log tick for smooth recovery curve matching active workout density
-      if (_lastHrSample > 0) {
+      if (_hrFresh) {
         final zoneStr = _calculateZone(_lastHrSample);
         DatabaseHelper.instance.insertHeartRateLog(
           workoutId: state.workoutId!,
@@ -116,12 +147,13 @@ class HrrService {
       }
 
       int? updatedHr1m = state.hr1min;
-      if (elapsed == 60 && _lastHrSample > 0 && updatedHr1m == null) {
+      // Take the 1-minute reading at 60 s, or within 5 s after if the signal
+      // briefly dropped exactly then.
+      if (elapsed >= 60 && elapsed <= 65 && _hrFresh && updatedHr1m == null) {
         updatedHr1m = _lastHrSample;
-        final drop1 = state.peakHr - updatedHr1m;
         DatabaseHelper.instance.updateWorkoutHRR(
           workoutId: state.workoutId!,
-          hrr1min: drop1 > 0 ? drop1 : 0,
+          hrr1min: computeDrop(state.peakHr, updatedHr1m),
           recoveryDurationSec: 60,
         );
       }
@@ -145,16 +177,11 @@ class HrrService {
     int? drop2;
 
     if (elapsed >= 60) {
-      final hr1m = state.hr1min ?? (_lastHrSample > 0 ? _lastHrSample : null);
-      if (hr1m != null) {
-        drop1 = state.peakHr - hr1m;
-        if (drop1 < 0) drop1 = 0;
-      }
+      drop1 = computeDrop(state.peakHr, state.hr1min);
     }
 
-    if (elapsed >= 120 && _lastHrSample > 0) {
-      drop2 = state.peakHr - _lastHrSample;
-      if (drop2 < 0) drop2 = 0;
+    if (elapsed >= 120 && _hrFresh) {
+      drop2 = computeDrop(state.peakHr, _lastHrSample);
     }
 
     await DatabaseHelper.instance.updateWorkoutHRR(
